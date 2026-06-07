@@ -58,11 +58,25 @@ struct AreaColumn<Content: View>: View {
     /// Column title shown in the header.
     let title: String
     /// Optional pre-formatted total-time string (e.g. "1h 30m"); hidden when nil.
-    var totalTime: String? = nil
+    var totalTime: String?
     /// Accent color for the header dot (per-area visual key).
-    var accent: Color = .secondary
+    var accent: Color
     /// The column body.
     @ViewBuilder var content: Content
+
+    /// `totalTime` and `accent` default here (rather than on the stored
+    /// properties) so callers can omit them while keeping the declarations clean.
+    init(
+        title: String,
+        totalTime: String? = nil,
+        accent: Color = .secondary,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.totalTime = totalTime
+        self.accent = accent
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

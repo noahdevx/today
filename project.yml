@@ -7,8 +7,6 @@ options:
   # Minimum macOS version. 14.0 is the first release that ships SwiftData.
   deploymentTarget:
     macOS: "14.0"
-  # Reverse-DNS prefix used when composing bundle identifiers.
-  bundleIdPrefix: com.today
   # Mirror on-disk folders as Xcode groups so the navigator matches the files.
   createIntermediateGroups: true
   # Sort groups above loose files in the navigator for readability.
@@ -37,7 +35,6 @@ settings:
     # team/identity for distribution.
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"
-    DEVELOPMENT_TEAM: ""
 
 targets:
   Today:
@@ -66,9 +63,21 @@ targets:
         # Asset-catalog names for the app icon and global accent color.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # Let the SwiftLint build phase below read the source tree.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
     # Link the HotKey package into this target.
     dependencies:
       - package: HotKey
+    # Run SwiftLint on every build (warnings only; no-op if SwiftLint is absent).
+    preBuildScripts:
+      - name: SwiftLint
+        basedOnDependencyAnalysis: false
+        script: |
+          if command -v swiftlint >/dev/null 2>&1; then
+            swiftlint
+          else
+            echo "warning: SwiftLint not installed - run 'brew install swiftlint' or 'make lint'"
+          fi
 
   # Unit test bundle (Swift Testing). Depends on the app target so tests can
   # `@testable import Today`; XcodeGen wires the app as the test host.

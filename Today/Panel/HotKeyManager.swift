@@ -17,13 +17,17 @@ final class HotKeyManager {
     /// this to perform the toggle.
     var onToggle: (() -> Void)?
 
-    /// Registers the global shortcut.
+    /// Registers the global shortcut. This is the real, system-wide trigger.
     ///
     /// - Parameters:
-    ///   - key: the base key. Default `.t` (mnemonic for "Today").
-    ///   - modifiers: required modifiers. Default Command+Option, chosen to avoid
-    ///     clashing with common system/app shortcuts.
-    func register(key: Key = .t, modifiers: NSEvent.ModifierFlags = [.command, .option]) {
+    ///   - key: the base key. Defaults to `GlobalShortcut.hotKeyKey` (the "Today"
+    ///     mnemonic, Option-Command-T).
+    ///   - modifiers: required modifiers. Defaults to `GlobalShortcut.hotKeyModifiers`,
+    ///     chosen to avoid clashing with common system/app shortcuts.
+    func register(
+        key: Key = GlobalShortcut.hotKeyKey,
+        modifiers: NSEvent.ModifierFlags = GlobalShortcut.hotKeyModifiers
+    ) {
         let hotKey = HotKey(key: key, modifiers: modifiers)
         // Fire the toggle on key-down.
         hotKey.keyDownHandler = { [weak self] in
@@ -34,10 +38,5 @@ final class HotKeyManager {
             }
         }
         self.hotKey = hotKey
-    }
-
-    /// Unregisters the shortcut by releasing the retained registration.
-    func unregister() {
-        hotKey = nil
     }
 }

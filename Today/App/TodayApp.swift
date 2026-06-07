@@ -27,12 +27,14 @@ struct TodayApp: App {
 /// The menu shown when clicking the menu bar icon.
 private struct MenuBarCommands: View {
     var body: some View {
-        // Toggle the floating panel. The shortcut shown here mirrors the global
-        // hotkey so users can discover it from the menu.
+        // Toggle the floating panel. The `.keyboardShortcut` here is display-only:
+        // it shows the shortcut next to the menu item so users can discover it.
+        // The actual global toggle is handled by HotKeyManager. Both read
+        // GlobalShortcut, so the displayed hint always matches the real hotkey.
         Button("Show / Hide Today") {
             AppDelegate.shared?.togglePanel()
         }
-        .keyboardShortcut("t", modifiers: [.command, .option])
+        .keyboardShortcut(GlobalShortcut.menuKey, modifiers: GlobalShortcut.menuModifiers)
 
         Divider()
 

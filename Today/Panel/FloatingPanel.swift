@@ -60,11 +60,13 @@ final class FloatingPanel: NSPanel {
         fatalError("init(coder:) is not supported for FloatingPanel")
     }
 
-    /// Allow the borderless-style panel to receive keyboard focus (needed for
-    /// future text input and for Escape to reach `cancelOperation`).
+    /// Allow the panel to receive keyboard focus (so Escape reaches
+    /// `cancelOperation`, and for future text input).
+    ///
+    /// Currently redundant: a `.titled` window can already become key. Kept as
+    /// insurance for a future borderless / non-activating Spotlight-style
+    /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
-    /// Allow the panel to act as the main window when focused.
-    override var canBecomeMain: Bool { true }
 
     /// Hide (not destroy) the panel when the user presses Escape.
     override func cancelOperation(_ sender: Any?) {
