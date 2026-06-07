@@ -1,0 +1,25 @@
+# SwiftLint configuration.
+# Run on demand with `make lint` / `make lint-fix`; also runs automatically as a
+# build phase on every build (see project.yml).
+
+# Folders to lint.
+included:
+  - Today
+  - TodayTests
+
+# Never lint generated or build output.
+excluded:
+  - build
+  - Today.xcodeproj
+  - .build
+
+# We keep long explanatory doc comments, so don't flag long comment/URL lines.
+line_length:
+  warning: 120
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  excluded:
+    - id # SwiftData model identity property
