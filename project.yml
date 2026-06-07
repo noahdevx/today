@@ -70,15 +70,36 @@ targets:
     dependencies:
       - package: HotKey
 
-# A shared scheme so `xcodebuild -scheme Today` works from the command line.
+  # Unit test bundle (Swift Testing). Depends on the app target so tests can
+  # `@testable import Today`; XcodeGen wires the app as the test host.
+  TodayTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TodayTests
+    dependencies:
+      - target: Today
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.today.app.tests
+
+# A shared scheme so `xcodebuild -scheme Today` and `xcodebuild test` work from
+# the command line.
 schemes:
   Today:
     build:
       targets:
         Today: all
+        TodayTests: [test]
     # Debug configuration for local run.
     run:
       config: Debug
+    # Run the unit tests (Debug) for `xcodebuild test`.
+    test:
+      config: Debug
+      targets:
+        - TodayTests
     # Release configuration for archiving/distribution.
     archive:
       config: Release
