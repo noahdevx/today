@@ -1,0 +1,84 @@
+# XcodeGen project definition. `xcodegen generate` reads this file to produce
+# Today.xcodeproj. This file (not the generated project) is the source of truth,
+# which is why Today.xcodeproj is git-ignored.
+name: Today
+
+options:
+  # Minimum macOS version. 14.0 is the first release that ships SwiftData.
+  deploymentTarget:
+    macOS: "14.0"
+  # Reverse-DNS prefix used when composing bundle identifiers.
+  bundleIdPrefix: com.today
+  # Mirror on-disk folders as Xcode groups so the navigator matches the files.
+  createIntermediateGroups: true
+  # Sort groups above loose files in the navigator for readability.
+  groupSortPosition: top
+
+# Swift Package dependencies, resolved by Xcode/SwiftPM at build time.
+packages:
+  HotKey:
+    # Global hotkey library (Carbon-based: sandbox-friendly, needs no special
+    # permission). Used by HotKeyManager for the show/hide shortcut.
+    url: https://github.com/soffes/HotKey
+    # Pin an exact version for reproducible builds.
+    exactVersion: "0.2.1"
+
+# Build settings shared by all targets.
+settings:
+  base:
+    # Use the Swift 6 language mode / toolchain.
+    SWIFT_VERSION: "6.0"
+    # User-facing version string (CFBundleShortVersionString).
+    MARKETING_VERSION: "0.1.0"
+    # Internal build number (CFBundleVersion).
+    CURRENT_PROJECT_VERSION: "1"
+    # Local development signing: ad-hoc ("-") with no team, so the app builds and
+    # runs on this machine without an Apple Developer account. Replace with a real
+    # team/identity for distribution.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Today:
+    # Build a macOS application bundle.
+    type: application
+    platform: macOS
+    # Compile everything under the Today/ source folder.
+    sources:
+      - path: Today
+    settings:
+      base:
+        # Product and bundle identity.
+        PRODUCT_NAME: Today
+        PRODUCT_BUNDLE_IDENTIFIER: com.today.app
+        # Synthesize Info.plist from the INFOPLIST_KEY_* settings below instead of
+        # maintaining a separate Info.plist file.
+        GENERATE_INFOPLIST_FILE: YES
+        # Run as a menu bar agent: no Dock icon, no app-switcher entry, and no
+        # window opened automatically at launch.
+        INFOPLIST_KEY_LSUIElement: YES
+        # Display name and copyright (shown in Finder / About).
+        INFOPLIST_KEY_CFBundleDisplayName: Today
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright (C) 2026 Today. Licensed under AGPL-3.0."
+        # Entitlements file that enables the App Sandbox.
+        CODE_SIGN_ENTITLEMENTS: Today.entitlements
+        # Asset-catalog names for the app icon and global accent color.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    # Link the HotKey package into this target.
+    dependencies:
+      - package: HotKey
+
+# A shared scheme so `xcodebuild -scheme Today` works from the command line.
+schemes:
+  Today:
+    build:
+      targets:
+        Today: all
+    # Debug configuration for local run.
+    run:
+      config: Debug
+    # Release configuration for archiving/distribution.
+    archive:
+      config: Release

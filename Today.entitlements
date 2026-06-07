@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox: runs the app inside macOS's restricted container. Enabled
+	     because it is required for Mac App Store distribution and is good security
+	     hygiene. The global hotkey (Carbon RegisterEventHotKey via the HotKey
+	     library) and SwiftData both work under the sandbox, so no additional
+	     entitlements are needed yet. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+</dict>
+</plist>
