@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 /// The main floating-panel layout.
@@ -130,6 +131,8 @@ struct AreaPlaceholder: View {
 }
 
 #Preview {
+    // In-memory store so the @Query-backed Today/Done areas render in previews.
     ContentView()
         .frame(width: 1100, height: 640)
+        .modelContainer(for: TodayTask.self, inMemory: true)
 }
