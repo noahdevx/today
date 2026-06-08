@@ -103,4 +103,11 @@ extension TodayTask {
     var isScheduled: Bool { scheduledAt != nil }
     /// Waiting when it has a waiting-start timestamp.
     var isWaiting: Bool { startedWaitingAt != nil }
+
+    /// Children sorted by their position in the structured tree. The raw
+    /// `children` relationship is unordered; this provides the display order
+    /// used by StructuredAreaView and MinimapView.
+    var sortedChildren: [TodayTask] {
+        children.sorted { $0.structuredOrder < $1.structuredOrder }
+    }
 }

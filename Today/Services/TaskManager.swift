@@ -23,15 +23,13 @@ enum TaskManager {
         estimatedMinutes: Int? = nil,
         in context: ModelContext
     ) -> TodayTask {
-        let order = nextTodayOrder(in: context)
+        let todayOrd = nextTodayOrder(in: context)
+        let structOrd = nextStructuredOrder(parent: nil, in: context)
         let task = TodayTask(
             title: title,
             estimatedMinutes: estimatedMinutes,
-            todayOrder: order,
-            // Provisional: reuse the Today position as the structured position too.
-            // The Structured area is a placeholder until Step 4, which will own the
-            // real structuredOrder assignment.
-            structuredOrder: order
+            todayOrder: todayOrd,
+            structuredOrder: structOrd
         )
         context.insert(task)
         save(context)
@@ -91,6 +89,62 @@ enum TaskManager {
         save(context)
     }
 
+    // MARK: - Structured area
+
+    /// Creates a task in the structured tree under the given parent (or at root
+    /// when `parent` is nil). The task is **not** added to Today—it only appears
+    /// in the Structured column until the user drags it over.
+    @discardableResult
+    static func createStructuredTask(
+        title: String,
+        estimatedMinutes: Int? = nil,
+        parent: TodayTask? = nil,
+        in context: ModelContext
+    ) -> TodayTask {
+        let order = nextStructuredOrder(parent: parent, in: context)
+        let task = TodayTask(
+            title: title,
+            estimatedMinutes: estimatedMinutes,
+            structuredOrder: order,
+            parent: parent
+        )
+        context.insert(task)
+        save(context)
+        return task
+    }
+
+    /// Adds an existing structured task to the Today column by assigning a
+    /// `todayOrder`. If the task was previously completed, `doneAt` is cleared so
+    /// it reappears as active. The task's position in the structured tree is
+    /// unchanged (the "copy, don't move" semantic).
+    static func addStructuredTaskToToday(_ task: TodayTask, in context: ModelContext) {
+        guard task.todayOrder == nil else { return }
+        task.todayOrder = nextTodayOrder(in: context)
+        task.doneAt = nil
+        task.updatedAt = .now
+        save(context)
+    }
+
+    /// Removes a task from the Today column without deleting it. The task stays
+    /// in the structured tree with its hierarchy and ordering intact.
+    static func removeFromToday(_ task: TodayTask, in context: ModelContext) {
+        task.todayOrder = nil
+        task.updatedAt = .now
+        save(context)
+    }
+
+    // MARK: - Find
+
+    /// Looks up a task by its stable UUID. Returns `nil` when the ID doesn't match
+    /// any persisted task (e.g. after a cascade delete).
+    static func findTask(id: UUID, in context: ModelContext) -> TodayTask? {
+        var descriptor = FetchDescriptor<TodayTask>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
     // MARK: - Helpers
 
     /// Next free Today position: one past the current maximum, or 0 when Today is
@@ -101,6 +155,22 @@ enum TaskManager {
         )
         let activeTasks = (try? context.fetch(descriptor)) ?? []
         let maxOrder = activeTasks.compactMap(\.todayOrder).max()
+        return (maxOrder ?? -1) + 1
+    }
+
+    /// Next free `structuredOrder` among siblings of the given parent. For root
+    /// tasks (`parent` nil) it scans all root-level tasks; for children it reads
+    /// the parent's `children` array. Returns 0 when there are no siblings yet.
+    private static func nextStructuredOrder(parent: TodayTask?, in context: ModelContext) -> Int {
+        let siblings: [TodayTask]
+        if let parent {
+            siblings = parent.children
+        } else {
+            let descriptor = FetchDescriptor<TodayTask>()
+            let all = (try? context.fetch(descriptor)) ?? []
+            siblings = all.filter { $0.parent == nil }
+        }
+        let maxOrder = siblings.map(\.structuredOrder).max()
         return (maxOrder ?? -1) + 1
     }
 

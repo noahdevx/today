@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -7,49 +8,65 @@ import SwiftUI
 /// The Today / Done / Structured / Map / Waiting areas are filled in by later
 /// steps.
 struct ContentView: View {
-    /// Whether the Done column is shown. Local UI state for PR 1; the real
-    /// toggle/logic arrives in Step 3.
+    /// Whether the Done column is shown.
     @State private var showDone = false
+    /// Shared hover state for the Today → Structured/Map highlight link.
+    @State private var hoverEngine = HoverLinkEngine()
 
     var body: some View {
-        // Horizontal row of columns: Today | (Done) | Structured | Map | Waiting.
-        HStack(spacing: 0) {
-            // Left: the Today column. It owns the Done toggle via a binding.
-            TodayAreaView(showDone: $showDone)
-                .frame(width: 260)
+        VStack(spacing: 0) {
+            // Drag handle: the only region that moves the panel window. Keeps
+            // SwiftUI .draggable modifiers (structured task drag) working in
+            // the content area below.
+            dragHandle
 
             Divider()
 
-            // Done column appears between Today and Structured only when toggled.
-            if showDone {
-                DoneAreaView()
-                    .frame(width: 220)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
+            // Horizontal row of columns: Today | (Done) | Structured | Map | Waiting.
+            HStack(spacing: 0) {
+                TodayAreaView(showDone: $showDone)
+                    .frame(width: 260)
+
                 Divider()
+
+                if showDone {
+                    DoneAreaView()
+                        .frame(width: 220)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                    Divider()
+                }
+
+                StructuredAreaView()
+                    .frame(minWidth: 280, maxWidth: .infinity)
+
+                Divider()
+
+                MinimapView()
+                    .frame(width: 96)
+
+                Divider()
+
+                WaitingAreaView()
+                    .frame(width: 260)
             }
-
-            // Structured tree takes the remaining flexible width.
-            StructuredAreaView()
-                .frame(minWidth: 280, maxWidth: .infinity)
-
-            Divider()
-
-            // Narrow minimap column.
-            MinimapView()
-                .frame(width: 96)
-
-            Divider()
-
-            // Right: Waiting (Scheduled + Waiting sections).
-            WaitingAreaView()
-                .frame(width: 260)
         }
-        // Animate the Done column appearing/disappearing.
         .animation(.easeInOut(duration: 0.2), value: showDone)
-        // Minimum size keeps all five columns usable.
         .frame(minWidth: 920, minHeight: 520)
-        // Translucent background for the Spotlight-like panel feel.
         .background(.regularMaterial)
+        .environment(hoverEngine)
+    }
+
+    /// Thin bar at the top of the panel that the user can drag to reposition
+    /// the window. A small capsule provides a visual affordance.
+    private var dragHandle: some View {
+        WindowDragHandle()
+            .frame(maxWidth: .infinity)
+            .frame(height: 24)
+            .overlay {
+                Capsule()
+                    .fill(.quaternary)
+                    .frame(width: 36, height: 4)
+            }
     }
 }
 
@@ -130,8 +147,28 @@ struct AreaPlaceholder: View {
     }
 }
 
+// MARK: - Window drag handle
+
+/// Bridges to AppKit so the user can reposition the panel by dragging this
+/// region. Replaces the hidden title bar's standard drag behavior; the rest
+/// of the content area does not move the window, which lets SwiftUI
+/// `.draggable` modifiers (e.g. structured task drag-to-Today) work normally.
+private struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        DragView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// NSView that forwards mouse-down events to the window's drag machinery.
+    class DragView: NSView {
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+    }
+}
+
 #Preview {
-    // In-memory store so the @Query-backed Today/Done areas render in previews.
     ContentView()
         .frame(width: 1100, height: 640)
         .modelContainer(for: TodayTask.self, inMemory: true)

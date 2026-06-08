@@ -10,6 +10,8 @@ struct TodayAreaView: View {
 
     /// The shared context for all mutations (injected via `.modelContainer`).
     @Environment(\.modelContext) private var modelContext
+    /// Hover engine for the Today → Structured/Map highlight link.
+    @Environment(HoverLinkEngine.self) private var hoverEngine
 
     /// Active Today tasks: placed in Today (`todayOrder != nil`) and not yet done,
     /// sorted by their Today position. The query updates automatically on changes.
@@ -23,15 +25,30 @@ struct TodayAreaView: View {
     @State private var newTitle = ""
     /// Draft estimate (minutes) for the new-task field; empty means "no estimate".
     @State private var newMinutes = ""
+    /// True while a dragged item hovers over this column (visual drop feedback).
+    @State private var isDropTargeted = false
 
     var body: some View {
-        // Header total reflects the sum of the visible Today estimates.
         AreaColumn(title: "Today", totalTime: tasks.totalEstimateLabel, accent: .yellow) {
             VStack(alignment: .leading, spacing: 10) {
                 doneToggle
                 addRow
                 taskList
             }
+        }
+        // Visual feedback: highlight the column border when a structured task
+        // is dragged over it.
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.yellow.opacity(0.5), lineWidth: 2)
+            }
+        }
+        // Accept drops of structured task IDs (UUID strings).
+        .dropDestination(for: String.self) { items, _ in
+            handleExternalDrop(items)
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
     }
 
@@ -76,6 +93,10 @@ struct TodayAreaView: View {
                 TaskRow(task: task) {
                     TaskManager.complete(task, in: modelContext)
                 }
+                // Update the hover engine so Structured and Map highlight this task.
+                .onHover { hovering in
+                    hoverEngine.hoveredTaskID = hovering ? task.id : nil
+                }
                 .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
                 .listRowSeparator(.hidden)
                 .swipeActions(edge: .trailing) {
@@ -110,5 +131,19 @@ struct TodayAreaView: View {
     /// Forwards a drag-reorder to the manager, which renumbers `todayOrder`.
     private func moveTasks(from source: IndexSet, to destination: Int) {
         TaskManager.reorderToday(tasks, from: source, to: destination, in: modelContext)
+    }
+
+    /// Handles a drop of structured task IDs (UUID strings) into the Today
+    /// column. Each task is looked up by ID and added to Today if it isn't
+    /// there already.
+    private func handleExternalDrop(_ items: [String]) -> Bool {
+        var handled = false
+        for item in items {
+            guard let uuid = UUID(uuidString: item),
+                  let task = TaskManager.findTask(id: uuid, in: modelContext) else { continue }
+            TaskManager.addStructuredTaskToToday(task, in: modelContext)
+            handled = true
+        }
+        return handled
     }
 }
