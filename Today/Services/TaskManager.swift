@@ -251,7 +251,10 @@ enum TaskManager {
     /// Saves the context, surfacing failures during development. SwiftData
     /// autosaves, but an explicit save makes the write deterministic for the UI
     /// and for tests.
-    private static func save(_ context: ModelContext) {
+    ///
+    /// Internal (not private) so the editing/tree-move extension in
+    /// `TaskManager+Editing.swift` funnels its writes through the same place.
+    static func save(_ context: ModelContext) {
         do {
             try context.save()
         } catch {

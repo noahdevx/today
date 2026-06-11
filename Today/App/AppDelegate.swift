@@ -38,6 +38,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager.register()
     }
 
+    // MARK: - Float-on-top lifecycle
+
+    /// Float the panel above other windows only while this app is active.
+    ///
+    /// The level switch is tied to the app's activation state (not the panel's
+    /// key-window state): switching key windows inside the app (e.g. opening
+    /// Settings) keeps the panel floating, while switching to another app drops
+    /// it to the normal level so it doesn't obscure unrelated windows.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        panel?.level = .floating
+    }
+
+    /// Drop the panel to the normal window level when the user switches to
+    /// another app, so it stops floating over their work.
+    func applicationDidResignActive(_ notification: Notification) {
+        panel?.level = .normal
+    }
+
     // MARK: - Settings support
 
     /// Re-registers the global hotkey with the preset currently stored in

@@ -70,22 +70,59 @@ final class FloatingPanel: NSPanel {
     /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
 
-    /// Float above other windows while the panel has keyboard focus so the
-    /// workspace stays visible while the user is working in it. Drop to
-    /// normal window level when the user clicks away to another app, so the
-    /// panel doesn't permanently obscure unrelated windows.
+    /// Request app activation whenever the panel becomes key.
+    ///
+    /// Clicking a panel of a menu bar (LSUIElement) app makes the window key,
+    /// but does not always activate the app itself. Without activation the
+    /// system can hand key status straight back to the previously active app,
+    /// which made the panel fall behind other windows right after clicking it.
+    /// The window level itself is managed per app-activation in AppDelegate
+    /// (not here), so window-to-window focus changes inside the app (e.g.
+    /// opening Settings) no longer drop the panel to the back.
     override func becomeKey() {
         super.becomeKey()
-        level = .floating
-    }
-
-    override func resignKey() {
-        super.resignKey()
-        level = .normal
+        NSApp.activate()
     }
 
     /// Hide (not destroy) the panel when the user presses Escape.
     override func cancelOperation(_ sender: Any?) {
         orderOut(nil)
+    }
+
+    /// Routes Cmd-Z / Shift-Cmd-Z to the SwiftData undo manager.
+    ///
+    /// As a menu bar (LSUIElement) app there is no Edit menu to provide the
+    /// standard undo/redo key equivalents, so the panel resolves them itself.
+    /// While a text field is being edited (the first responder is the field
+    /// editor) the keys are left to the text system, which manages its own
+    /// undo stack for typing.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Only plain Cmd-Z / Shift-Cmd-Z are handled here.
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isUndo = modifiers == .command && event.charactersIgnoringModifiers == "z"
+        let isRedo = modifiers == [.command, .shift] && event.charactersIgnoringModifiers == "z"
+        guard isUndo || isRedo else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // Text editing in progress: defer to the field editor's own undo.
+        if firstResponder is NSTextView {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // Apply to the shared store's undo stack (changes are registered
+        // automatically by SwiftData).
+        guard let undoManager = AppState.shared.modelContainer.mainContext.undoManager else {
+            return super.performKeyEquivalent(with: event)
+        }
+        if isUndo, undoManager.canUndo {
+            undoManager.undo()
+            return true
+        }
+        if isRedo, undoManager.canRedo {
+            undoManager.redo()
+            return true
+        }
+        return true
     }
 }

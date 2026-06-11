@@ -31,6 +31,8 @@ struct WaitingAreaView: View {
 private struct ScheduledSectionView: View {
     /// Shared context for mutations.
     @Environment(\.modelContext) private var modelContext
+    /// Selection engine for row selection and inline editing.
+    @Environment(SelectionEngine.self) private var selectionEngine
 
     /// Scheduled, not-yet-done tasks, soonest first.
     @Query(
@@ -100,24 +102,41 @@ private struct ScheduledSectionView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         } else {
-            List {
-                ForEach(tasks) { task in
-                    ScheduledRow(task: task, now: now) {
-                        TaskManager.moveScheduledToToday(task, in: modelContext)
-                    }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-                    .listRowSeparator(.hidden)
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            TaskManager.delete(task, in: modelContext)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(tasks) { task in
+                        // Static row or the inline editor while being edited.
+                        Group {
+                            if selectionEngine.isEditing(task.id, in: .scheduled) {
+                                InlineTaskEditor(task: task, area: .scheduled)
+                            } else {
+                                ScheduledRow(task: task, now: now) {
+                                    TaskManager.moveScheduledToToday(task, in: modelContext)
+                                }
+                            }
                         }
+                        .taskSelectable(task, in: .scheduled)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                TaskManager.delete(task, in: modelContext)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        // Anchor for ScrollViewReader (selection follow).
+                        .id(task.id)
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                // Follow the selection so the selected row stays visible.
+                .onChange(of: selectionEngine.selectedTaskID) { _, newID in
+                    guard selectionEngine.focusedArea == .scheduled, let newID else { return }
+                    proxy.scrollTo(newID)
+                }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .frame(maxHeight: .infinity)
         }
     }
@@ -193,6 +212,8 @@ private struct ScheduledRow: View {
 private struct WaitingSectionView: View {
     /// Shared context for mutations.
     @Environment(\.modelContext) private var modelContext
+    /// Selection engine for row selection and inline editing.
+    @Environment(SelectionEngine.self) private var selectionEngine
 
     /// Waiting, not-yet-done tasks, oldest first.
     @Query(
@@ -251,24 +272,41 @@ private struct WaitingSectionView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         } else {
-            List {
-                ForEach(tasks) { task in
-                    WaitingRow(task: task) {
-                        TaskManager.moveWaitingToToday(task, in: modelContext)
-                    }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-                    .listRowSeparator(.hidden)
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            TaskManager.delete(task, in: modelContext)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(tasks) { task in
+                        // Static row or the inline editor while being edited.
+                        Group {
+                            if selectionEngine.isEditing(task.id, in: .waiting) {
+                                InlineTaskEditor(task: task, area: .waiting)
+                            } else {
+                                WaitingRow(task: task) {
+                                    TaskManager.moveWaitingToToday(task, in: modelContext)
+                                }
+                            }
                         }
+                        .taskSelectable(task, in: .waiting)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                TaskManager.delete(task, in: modelContext)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        // Anchor for ScrollViewReader (selection follow).
+                        .id(task.id)
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                // Follow the selection so the selected row stays visible.
+                .onChange(of: selectionEngine.selectedTaskID) { _, newID in
+                    guard selectionEngine.focusedArea == .waiting, let newID else { return }
+                    proxy.scrollTo(newID)
+                }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .frame(maxHeight: .infinity)
         }
     }

@@ -23,6 +23,11 @@ final class AppState {
             // SQLite store) so data survives relaunches.
             let configuration = ModelConfiguration(isStoredInMemoryOnly: false)
             modelContainer = try ModelContainer(for: TodayTask.self, configurations: configuration)
+            // Attach an undo manager so SwiftData automatically registers every
+            // main-context change for undo/redo. For manually built containers
+            // this assignment replaces the `.modelContainer(isUndoEnabled:)`
+            // SwiftUI modifier. FloatingPanel routes Cmd-Z / Shift-Cmd-Z here.
+            modelContainer.mainContext.undoManager = UndoManager()
         } catch {
             // If the store can't be opened the app is unusable, so fail loudly
             // rather than limping along without persistence.
