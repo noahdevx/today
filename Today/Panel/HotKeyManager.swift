@@ -5,8 +5,8 @@ import HotKey
 ///
 /// Uses the HotKey library (Carbon `RegisterEventHotKey` under the hood), which
 /// works inside the App Sandbox and needs no Accessibility / Input Monitoring
-/// permission. The default shortcut is Option-Command-T; it will become
-/// user-configurable in a later step.
+/// permission. The shortcut is one of the `GlobalShortcut` presets, selectable
+/// in Settings (default: Option-Command-T).
 @MainActor
 final class HotKeyManager {
     /// Retained registration. Keeping a reference is what keeps the hotkey alive;
@@ -19,16 +19,15 @@ final class HotKeyManager {
 
     /// Registers the global shortcut. This is the real, system-wide trigger.
     ///
-    /// - Parameters:
-    ///   - key: the base key. Defaults to `GlobalShortcut.hotKeyKey` (the "Today"
-    ///     mnemonic, Option-Command-T).
-    ///   - modifiers: required modifiers. Defaults to `GlobalShortcut.hotKeyModifiers`,
-    ///     chosen to avoid clashing with common system/app shortcuts.
-    func register(
-        key: Key = GlobalShortcut.hotKeyKey,
-        modifiers: NSEvent.ModifierFlags = GlobalShortcut.hotKeyModifiers
-    ) {
-        let hotKey = HotKey(key: key, modifiers: modifiers)
+    /// Calling it again replaces the previous registration (assigning the new
+    /// `HotKey` releases the old one, which unregisters it), so this same
+    /// method also serves re-registration when the user picks a different
+    /// preset in Settings.
+    ///
+    /// - Parameter shortcut: the preset to register. Defaults to the selection
+    ///   persisted in UserDefaults (`GlobalShortcut.current`).
+    func register(_ shortcut: GlobalShortcut = .current) {
+        let hotKey = HotKey(key: shortcut.hotKeyKey, modifiers: shortcut.hotKeyModifiers)
         // Fire the toggle on key-down.
         hotKey.keyDownHandler = { [weak self] in
             // HotKey dispatches its handler on the main thread, so it is safe to

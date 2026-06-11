@@ -27,6 +27,9 @@ struct TodayAreaView: View {
     @State private var newMinutes = ""
     /// True while a dragged item hovers over this column (visual drop feedback).
     @State private var isDropTargeted = false
+    /// Focus of the new-task title field; set by the Cmd-N shortcut and after
+    /// adding a task (for rapid consecutive entry).
+    @FocusState private var isNewTaskFocused: Bool
 
     var body: some View {
         AreaColumn(title: "Today", totalTime: tasks.totalEstimateLabel, accent: .yellow) {
@@ -50,11 +53,20 @@ struct TodayAreaView: View {
         } isTargeted: { targeted in
             isDropTargeted = targeted
         }
+        // Invisible button that gives the panel a Cmd-N "new task" shortcut:
+        // it focuses the title field. opacity(0) keeps the button in the
+        // hierarchy (so the shortcut stays active) without rendering anything.
+        .background {
+            Button("New Task") { isNewTaskFocused = true }
+                .keyboardShortcut("n")
+                .opacity(0)
+        }
     }
 
     // MARK: - Subviews
 
     /// Button that toggles the Done column; the icon reflects open/closed state.
+    /// Cmd-D toggles it from the keyboard while the panel is key.
     private var doneToggle: some View {
         Button {
             showDone.toggle()
@@ -64,6 +76,7 @@ struct TodayAreaView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .keyboardShortcut("d")
     }
 
     /// New-task input: a title field plus an optional minutes field. Submitting
@@ -72,6 +85,7 @@ struct TodayAreaView: View {
         HStack(spacing: 6) {
             TextField("Add a task", text: $newTitle)
                 .textFieldStyle(.roundedBorder)
+                .focused($isNewTaskFocused)
                 .onSubmit(addTask)
             TextField("min", text: $newMinutes)
                 .textFieldStyle(.roundedBorder)
@@ -126,6 +140,8 @@ struct TodayAreaView: View {
         TaskManager.addToToday(title: title, estimatedMinutes: minutes, in: modelContext)
         newTitle = ""
         newMinutes = ""
+        // Keep the title field focused so several tasks can be entered in a row.
+        isNewTaskFocused = true
     }
 
     /// Forwards a drag-reorder to the manager, which renumbers `todayOrder`.

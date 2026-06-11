@@ -53,4 +53,23 @@ struct TodayTaskTests {
         let task = TodayTask(title: "t", startedWaitingAt: startedWaitingAt)
         #expect(task.isWaiting == (startedWaitingAt != nil))
     }
+
+    /// isDue: only scheduled tasks whose time has passed (or is exactly now)
+    /// are due. The scheduled time is given as an offset in seconds from the
+    /// reference date; nil = not scheduled.
+    @Test(
+        "isDue is true only when the scheduled time has arrived",
+        arguments: [
+            (nil, false),   // not scheduled -> never due
+            (-60, true),    // one minute ago -> due
+            (0, true),      // exactly now -> due
+            (60, false)     // one minute ahead -> not due yet
+        ] as [(Int?, Bool)]
+    )
+    func isDueChecksScheduledTime(offsetSeconds: Int?, expected: Bool) {
+        let now = Date.now
+        let scheduledAt = offsetSeconds.map { now.addingTimeInterval(TimeInterval($0)) }
+        let task = TodayTask(title: "t", scheduledAt: scheduledAt)
+        #expect(task.isDue(asOf: now) == expected)
+    }
 }

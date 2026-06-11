@@ -133,6 +133,76 @@ enum TaskManager {
         save(context)
     }
 
+    // MARK: - Waiting area
+
+    /// Creates a task that surfaces at the given time. It lives in the Scheduled
+    /// section (and at the root of the structured tree) until the user moves it
+    /// to Today, so no `todayOrder` is assigned here.
+    @discardableResult
+    static func schedule(
+        title: String,
+        estimatedMinutes: Int? = nil,
+        at date: Date,
+        in context: ModelContext
+    ) -> TodayTask {
+        let task = TodayTask(
+            title: title,
+            estimatedMinutes: estimatedMinutes,
+            structuredOrder: nextStructuredOrder(parent: nil, in: context),
+            scheduledAt: date
+        )
+        context.insert(task)
+        save(context)
+        return task
+    }
+
+    /// Creates a task blocked on an external condition (e.g. "waiting for a
+    /// reply"). It lives in the Waiting section until the user marks the
+    /// condition cleared, which moves it to Today.
+    @discardableResult
+    static func startWaiting(
+        title: String,
+        estimatedMinutes: Int? = nil,
+        note: String? = nil,
+        in context: ModelContext
+    ) -> TodayTask {
+        let task = TodayTask(
+            title: title,
+            estimatedMinutes: estimatedMinutes,
+            structuredOrder: nextStructuredOrder(parent: nil, in: context),
+            startedWaitingAt: .now,
+            waitingNote: note
+        )
+        context.insert(task)
+        save(context)
+        return task
+    }
+
+    /// Moves a scheduled task into the Today column: clears `scheduledAt` so it
+    /// leaves the Scheduled section, and appends it to the end of Today (unless
+    /// it is somehow already there).
+    static func moveScheduledToToday(_ task: TodayTask, in context: ModelContext) {
+        if task.todayOrder == nil {
+            task.todayOrder = nextTodayOrder(in: context)
+        }
+        task.scheduledAt = nil
+        task.updatedAt = .now
+        save(context)
+    }
+
+    /// Moves a waiting task into the Today column after its condition cleared:
+    /// clears the waiting state (timestamp and note) and appends it to the end
+    /// of Today (unless it is somehow already there).
+    static func moveWaitingToToday(_ task: TodayTask, in context: ModelContext) {
+        if task.todayOrder == nil {
+            task.todayOrder = nextTodayOrder(in: context)
+        }
+        task.startedWaitingAt = nil
+        task.waitingNote = nil
+        task.updatedAt = .now
+        save(context)
+    }
+
     // MARK: - Find
 
     /// Looks up a task by its stable UUID. Returns `nil` when the ID doesn't match

@@ -28,11 +28,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // at launch rather than on first panel open.
         _ = AppState.shared.modelContainer
 
+        // Apply the persisted appearance before any window is created.
+        applyTheme()
+
         // Route hotkey presses to the toggle.
         hotKeyManager.onToggle = { [weak self] in
             self?.togglePanel()
         }
         hotKeyManager.register()
+    }
+
+    // MARK: - Settings support
+
+    /// Re-registers the global hotkey with the preset currently stored in
+    /// UserDefaults. Called by Settings when the user picks a different preset.
+    func refreshHotKey() {
+        hotKeyManager.register()
+    }
+
+    /// Applies the persisted theme app-wide. A `nil` appearance clears the
+    /// override so windows follow the system appearance again.
+    func applyTheme() {
+        NSApp.appearance = AppTheme.current.appearance
     }
 
     // MARK: - Panel control
@@ -54,8 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = panel ?? makePanel()
         self.panel = panel
 
-        // Activate first so the (agent) app can take focus, then front the panel.
-        NSApp.activate(ignoringOtherApps: true)
+        // Request activation first so the (agent) app can take focus, then
+        // front the panel. activate() (macOS 14+) replaces the deprecated
+        // activate(ignoringOtherApps:); the hotkey/menu click is a direct user
+        // action, so the system honors the request.
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
 

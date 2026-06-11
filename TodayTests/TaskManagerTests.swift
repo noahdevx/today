@@ -219,6 +219,84 @@ struct TaskManagerTests {
         #expect(found?.id == task.id)
         #expect(missing == nil)
     }
+
+    // MARK: - Waiting area
+
+    /// schedule creates a task in the Scheduled section, not in Today.
+    @Test("schedule stamps scheduledAt and stays out of Today")
+    func scheduleCreatesScheduledTask() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let date = Date.now.addingTimeInterval(3600)
+        let task = TaskManager.schedule(title: "Call", estimatedMinutes: 15, at: date, in: context)
+
+        #expect(task.scheduledAt == date)
+        #expect(task.isScheduled)
+        #expect(task.todayOrder == nil)
+        #expect(task.estimatedMinutes == 15)
+    }
+
+    /// startWaiting stamps the waiting state and stores the note.
+    @Test("startWaiting stamps startedWaitingAt and stores the note")
+    func startWaitingCreatesWaitingTask() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let task = TaskManager.startWaiting(title: "Review", note: "waiting for reply", in: context)
+
+        #expect(task.isWaiting)
+        #expect(task.startedWaitingAt != nil)
+        #expect(task.waitingNote == "waiting for reply")
+        #expect(task.todayOrder == nil)
+    }
+
+    /// Scheduled/waiting tasks join the root level of the structured tree with
+    /// sequential, collision-free order.
+    @Test("schedule and startWaiting assign sequential root structuredOrder")
+    func waitingAreaTasksGetRootStructuredOrder() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let structured = TaskManager.createStructuredTask(title: "S", in: context)
+        let scheduled = TaskManager.schedule(title: "Sch", at: .now, in: context)
+        let waiting = TaskManager.startWaiting(title: "W", in: context)
+
+        #expect(structured.structuredOrder == 0)
+        #expect(scheduled.structuredOrder == 1)
+        #expect(waiting.structuredOrder == 2)
+    }
+
+    /// moveScheduledToToday clears the schedule and appends to the end of Today.
+    @Test("moveScheduledToToday clears scheduledAt and appends to Today")
+    func moveScheduledAppendsToToday() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let existing = TaskManager.addToToday(title: "A", in: context) // order 0
+        let task = TaskManager.schedule(title: "Sch", at: .now, in: context)
+        TaskManager.moveScheduledToToday(task, in: context)
+
+        #expect(task.scheduledAt == nil)
+        #expect(!task.isScheduled)
+        #expect(existing.todayOrder == 0)
+        #expect(task.todayOrder == 1)
+    }
+
+    /// moveWaitingToToday clears the waiting state (and note) and appends to Today.
+    @Test("moveWaitingToToday clears waiting state and appends to Today")
+    func moveWaitingAppendsToToday() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let task = TaskManager.startWaiting(title: "W", note: "blocked", in: context)
+        TaskManager.moveWaitingToToday(task, in: context)
+
+        #expect(task.startedWaitingAt == nil)
+        #expect(task.waitingNote == nil)
+        #expect(!task.isWaiting)
+        #expect(task.todayOrder == 0)
+    }
 }
 
 /// Pure-function tests for the duration formatter (no store needed).
