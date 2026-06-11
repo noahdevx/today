@@ -71,8 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = panel ?? makePanel()
         self.panel = panel
 
-        // Activate first so the (agent) app can take focus, then front the panel.
-        NSApp.activate(ignoringOtherApps: true)
+        // Request activation first so the (agent) app can take focus, then
+        // front the panel. activate() (macOS 14+) replaces the deprecated
+        // activate(ignoringOtherApps:); the hotkey/menu click is a direct user
+        // action, so the system honors the request.
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
     }
 

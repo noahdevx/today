@@ -39,9 +39,12 @@ struct SettingsView: View {
         // Apply changes immediately so no restart is needed.
         .onChange(of: shortcutRaw) { AppDelegate.shared?.refreshHotKey() }
         .onChange(of: themeRaw) { AppDelegate.shared?.applyTheme() }
-        // As a menu bar (LSUIElement) app we must activate explicitly, or the
-        // settings window can open behind the frontmost app's windows.
-        .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        // As a menu bar (LSUIElement) app we must request activation explicitly,
+        // or the settings window can open behind the frontmost app's windows.
+        // activate() (macOS 14+) replaces the deprecated
+        // activate(ignoringOtherApps:); opening Settings is a direct user
+        // action, so the system honors the request.
+        .onAppear { NSApp.activate() }
     }
 }
 
