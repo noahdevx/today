@@ -4,9 +4,9 @@ import SwiftUI
 
 /// The main floating-panel layout.
 ///
-/// PR 1 renders the five-area skeleton so the panel and hotkey can be verified.
-/// The Today / Done / Structured / Map / Waiting areas are filled in by later
-/// steps.
+/// A drag handle on top, then the five columns: Today | (Done) | Structured |
+/// Map | Waiting. All areas are data-driven; the Done column is toggled from
+/// the Today header (or Cmd-D).
 struct ContentView: View {
     /// Whether the Done column is shown.
     @State private var showDone = false
@@ -120,30 +120,6 @@ struct AreaColumn<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-/// Placeholder content used inside each area until its step is implemented:
-/// two skeleton rows plus a note describing what will go here.
-struct AreaPlaceholder: View {
-    /// Short description of the eventual content (and which step adds it).
-    let note: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Two grey skeleton rows hinting at a future list.
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(.quaternary)
-                .frame(height: 36)
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(.quaternary)
-                .frame(height: 36)
-            // Caption explaining what's coming.
-            Text(note)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.top, 2)
-        }
     }
 }
 

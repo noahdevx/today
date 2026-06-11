@@ -110,4 +110,13 @@ extension TodayTask {
     var sortedChildren: [TodayTask] {
         children.sorted { $0.structuredOrder < $1.structuredOrder }
     }
+
+    /// True when the task is scheduled and its time has arrived (as of `date`).
+    /// Drives the red "due" treatment in the Scheduled section. `date` is a
+    /// parameter (instead of reading `.now` directly) so views can pass a
+    /// ticking timeline date and tests can pass a fixed one.
+    func isDue(asOf date: Date = .now) -> Bool {
+        guard let scheduledAt else { return false }
+        return scheduledAt <= date
+    }
 }
