@@ -47,3 +47,20 @@ extension Collection where Element == TodayTask {
         TimeFormatting.durationLabel(minutes: totalEstimatedMinutes)
     }
 }
+
+// MARK: - Subtree aggregation (recursive)
+
+extension TodayTask {
+    /// Total estimated minutes for this task and its entire subtree. Unestimated
+    /// tasks contribute zero. The result includes the task's own estimate plus
+    /// every descendant, regardless of nesting depth.
+    var subtreeEstimatedMinutes: Int {
+        let own = estimatedMinutes ?? 0
+        return own + children.reduce(0) { $0 + $1.subtreeEstimatedMinutes }
+    }
+
+    /// Formatted subtree total for display in the Structured area (e.g. "2h 30m").
+    var subtreeEstimateLabel: String {
+        TimeFormatting.durationLabel(minutes: subtreeEstimatedMinutes)
+    }
+}

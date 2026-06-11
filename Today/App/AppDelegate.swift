@@ -37,10 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel control
 
-    /// Shows the panel if hidden, hides it if visible. Single entry point used by
-    /// both the hotkey and the menu.
+    /// Shows the panel if hidden, hides it if visible. When the panel is
+    /// visible but lost focus (behind other windows after `resignKey` dropped
+    /// it from floating level), the hotkey brings it back to the front
+    /// instead of hiding it.
     func togglePanel() {
-        if let panel, panel.isVisible {
+        if let panel, panel.isVisible, panel.isKeyWindow {
             hidePanel()
         } else {
             showPanel()

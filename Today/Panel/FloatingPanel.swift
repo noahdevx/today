@@ -34,9 +34,11 @@ final class FloatingPanel: NSPanel {
         // Keep the instance alive after closing so we can reuse it (paired with
         // ordering it out rather than closing).
         isReleasedWhenClosed = false
-        // Let users drag the window by its background, since the title bar is
-        // hidden.
-        isMovableByWindowBackground = true
+        // Window dragging is handled by the dedicated WindowDragHandle at the
+        // top of ContentView. Disabled here so SwiftUI .draggable modifiers
+        // (e.g. structured task drag-to-Today) work without accidentally
+        // triggering a window move.
+        isMovableByWindowBackground = false
         // Use the lightweight utility-window show/hide animation.
         animationBehavior = .utilityWindow
 
@@ -67,6 +69,20 @@ final class FloatingPanel: NSPanel {
     /// insurance for a future borderless / non-activating Spotlight-style
     /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
+
+    /// Float above other windows while the panel has keyboard focus so the
+    /// workspace stays visible while the user is working in it. Drop to
+    /// normal window level when the user clicks away to another app, so the
+    /// panel doesn't permanently obscure unrelated windows.
+    override func becomeKey() {
+        super.becomeKey()
+        level = .floating
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        level = .normal
+    }
 
     /// Hide (not destroy) the panel when the user presses Escape.
     override func cancelOperation(_ sender: Any?) {
