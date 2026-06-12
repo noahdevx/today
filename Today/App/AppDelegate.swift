@@ -38,28 +38,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager.register()
     }
 
-    // MARK: - Float-on-top lifecycle
+    // MARK: - Spotlight-style dismissal
 
-    /// Float the panel above other windows while this app is active.
+    /// Hide the panel when focus leaves the app (the user clicks another
+    /// app), Spotlight/Alfred-style.
     ///
-    /// Raising happens both here and in `FloatingPanel.becomeKey()` (the key
-    /// path covers LSUIElement cases where the window is keyed without the
-    /// app activating); lowering happens only below on deactivation, so
-    /// switching key windows inside the app (e.g. opening Settings) never
-    /// drops the panel behind other windows.
-    func applicationDidBecomeActive(_ notification: Notification) {
-        // isVisible guard: orderFrontRegardless would otherwise re-show a
-        // panel the user has hidden.
-        guard let panel, panel.isVisible else { return }
-        panel.level = .floating
-        // Sync the z-order with the restored level immediately.
-        panel.orderFrontRegardless()
-    }
-
-    /// Drop the panel to the normal window level when the user switches to
-    /// another app, so it stops floating over their work.
+    /// While visible the panel always floats on top; once the user switches
+    /// away it disappears entirely instead of lingering behind other windows.
+    /// This removes the buried-panel state that made re-surfacing unreliable.
+    /// The hotkey (or the menu bar item) brings it back.
     func applicationDidResignActive(_ notification: Notification) {
-        panel?.level = .normal
+        hidePanel()
     }
 
     // MARK: - Settings support
@@ -78,12 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel control
 
-    /// Shows the panel if hidden, hides it if visible. When the panel is
-    /// visible but lost focus (behind other windows after `resignKey` dropped
-    /// it from floating level), the hotkey brings it back to the front
-    /// instead of hiding it.
+    /// Shows the panel if hidden, hides it if visible. Since the panel hides
+    /// itself whenever the app loses focus, "visible" implies it is front and
+    /// active, so a plain visibility check is enough.
     func togglePanel() {
-        if let panel, panel.isVisible, panel.isKeyWindow {
+        if let panel, panel.isVisible {
             hidePanel()
         } else {
             showPanel()

@@ -23,13 +23,19 @@ final class FloatingPanel: NSPanel {
         // Marks this as a utility/floating panel (panels behave differently from
         // normal windows, e.g. they don't become the app's main window).
         isFloatingPanel = true
-        // Keep the panel above ordinary windows so it works as a quick overlay.
+        // Keep the panel above ordinary windows whenever it is visible.
+        // Spotlight-style dismissal (AppDelegate hides the panel when the app
+        // deactivates) guarantees "visible" implies "in use", so the level
+        // never needs to change.
         level = .floating
         // Show on every Space and over full-screen apps, so the hotkey works
         // regardless of which Space/app is active.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        // Do NOT auto-hide when the app deactivates; visibility is controlled
-        // explicitly via the hotkey/menu instead.
+        // Hiding on deactivation is handled by AppDelegate (hidePanel in
+        // applicationDidResignActive) instead of this flag: the built-in
+        // behavior would also re-show the panel automatically whenever the
+        // app activates again (e.g. just to use Settings), which we don't
+        // want - the hotkey/menu is the only way to bring the panel back.
         hidesOnDeactivate = false
         // Keep the instance alive after closing so we can reuse it (paired with
         // ordering it out rather than closing).
@@ -69,42 +75,6 @@ final class FloatingPanel: NSPanel {
     /// insurance for a future borderless / non-activating Spotlight-style
     /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
-
-    /// Surfaces the panel on any click while the app is inactive.
-    ///
-    /// Clicking a (partially covered) panel of a menu bar (LSUIElement) app
-    /// does not reliably activate the app: the cooperative `activate()`
-    /// request can be deferred or denied, the panel never reaches the
-    /// floating level again, and it stays buried behind other windows.
-    /// Intercepting the raw click is the dependable hook: order the panel
-    /// to the front layer-wise (works regardless of activation) and request
-    /// activation so keyboard focus follows.
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown, !NSApp.isActive {
-            orderFrontRegardless()
-            NSApp.activate()
-        }
-        super.sendEvent(event)
-    }
-
-    /// Restores float-on-top the moment the panel becomes key, no matter how
-    /// it was focused (click, Mission Control selection, hotkey).
-    ///
-    /// The level must be raised here and not only on app activation: for an
-    /// LSUIElement app the system can make the window key without activating
-    /// the app (and the cooperative `activate()` request may be denied), which
-    /// previously left the panel at the normal level where other windows
-    /// immediately covered it again. `orderFrontRegardless` syncs the z-order
-    /// with the new level right away, and activation is still requested so
-    /// keyboard focus follows. Lowering back to normal happens only on app
-    /// deactivation (AppDelegate), so moving key status to another window of
-    /// this app (e.g. Settings) does not drop the panel behind other windows.
-    override func becomeKey() {
-        super.becomeKey()
-        level = .floating
-        orderFrontRegardless()
-        NSApp.activate()
-    }
 
     /// Hide (not destroy) the panel when the user presses Escape.
     override func cancelOperation(_ sender: Any?) {
