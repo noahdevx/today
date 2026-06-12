@@ -87,12 +87,22 @@ final class FloatingPanel: NSPanel {
         super.sendEvent(event)
     }
 
-    /// Request app activation whenever the panel becomes key (e.g. shown via
-    /// the hotkey). The window level itself is managed per app-activation in
-    /// AppDelegate, so window-to-window focus changes inside the app (e.g.
-    /// opening Settings) don't drop the panel to the back.
+    /// Restores float-on-top the moment the panel becomes key, no matter how
+    /// it was focused (click, Mission Control selection, hotkey).
+    ///
+    /// The level must be raised here and not only on app activation: for an
+    /// LSUIElement app the system can make the window key without activating
+    /// the app (and the cooperative `activate()` request may be denied), which
+    /// previously left the panel at the normal level where other windows
+    /// immediately covered it again. `orderFrontRegardless` syncs the z-order
+    /// with the new level right away, and activation is still requested so
+    /// keyboard focus follows. Lowering back to normal happens only on app
+    /// deactivation (AppDelegate), so moving key status to another window of
+    /// this app (e.g. Settings) does not drop the panel behind other windows.
     override func becomeKey() {
         super.becomeKey()
+        level = .floating
+        orderFrontRegardless()
         NSApp.activate()
     }
 

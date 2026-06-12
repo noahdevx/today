@@ -40,14 +40,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Float-on-top lifecycle
 
-    /// Float the panel above other windows only while this app is active.
+    /// Float the panel above other windows while this app is active.
     ///
-    /// The level switch is tied to the app's activation state (not the panel's
-    /// key-window state): switching key windows inside the app (e.g. opening
-    /// Settings) keeps the panel floating, while switching to another app drops
-    /// it to the normal level so it doesn't obscure unrelated windows.
+    /// Raising happens both here and in `FloatingPanel.becomeKey()` (the key
+    /// path covers LSUIElement cases where the window is keyed without the
+    /// app activating); lowering happens only below on deactivation, so
+    /// switching key windows inside the app (e.g. opening Settings) never
+    /// drops the panel behind other windows.
     func applicationDidBecomeActive(_ notification: Notification) {
-        panel?.level = .floating
+        // isVisible guard: orderFrontRegardless would otherwise re-show a
+        // panel the user has hidden.
+        guard let panel, panel.isVisible else { return }
+        panel.level = .floating
+        // Sync the z-order with the restored level immediately.
+        panel.orderFrontRegardless()
     }
 
     /// Drop the panel to the normal window level when the user switches to
