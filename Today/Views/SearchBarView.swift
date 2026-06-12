@@ -11,6 +11,7 @@ import SwiftUI
 struct SearchBarView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SelectionEngine.self) private var selectionEngine
+    @Environment(HoverLinkEngine.self) private var hoverEngine
 
     /// Current query text (drives the dropdown).
     @State private var query = ""
@@ -128,9 +129,11 @@ struct SearchBarView: View {
     }
 
     /// Hands the task to the selection engine (reveal + focus + select) and
-    /// closes the search.
+    /// closes the search. Jumping is a focus interaction, so the live link
+    /// highlight moves to the focus side (any hover is cleared).
     private func jump(to task: TodayTask) {
         selectionEngine.jump(to: task)
+        hoverEngine.hoveredTaskID = nil
         dismiss()
     }
 
@@ -210,5 +213,6 @@ extension AreaKind {
     SearchBarView()
         .padding(40)
         .environment(SelectionEngine())
+        .environment(HoverLinkEngine())
         .modelContainer(for: TodayTask.self, inMemory: true)
 }

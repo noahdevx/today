@@ -58,10 +58,14 @@ private struct MinimapNode: View {
     @Environment(HoverLinkEngine.self) private var hoverEngine
     @Environment(SelectionEngine.self) private var selectionEngine
 
-    /// Whether this task is hovered or selected anywhere in the app (the
-    /// same condition the row highlight uses).
+    /// Whether this task is the current link-highlight target (the same
+    /// hover-over-focus exclusivity the row highlight uses: the hovered task
+    /// while hovering, otherwise the selected one).
     private var isHighlighted: Bool {
-        hoverEngine.hoveredTaskID == task.id || selectionEngine.selectedTaskID == task.id
+        if let hoveredID = hoverEngine.hoveredTaskID {
+            return hoveredID == task.id
+        }
+        return selectionEngine.selectedTaskID == task.id
     }
 
     var body: some View {

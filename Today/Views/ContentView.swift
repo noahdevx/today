@@ -85,8 +85,11 @@ struct ContentView: View {
         .focused($isPanelFocused)
         // Arrow keys: up/down move within the area; in the structured tree,
         // right expands (or steps into) and left collapses (or steps out of)
-        // the selected node, standard outline-view style.
+        // the selected node, standard outline-view style. Keyboard moves are
+        // focus interactions, so they hand the live link highlight back to
+        // the focus side (clearing any hover).
         .onMoveCommand { direction in
+            hoverEngine.hoveredTaskID = nil
             switch direction {
             case .up: selectionEngine.moveSelection(.up, context: modelContext)
             case .down: selectionEngine.moveSelection(.down, context: modelContext)
@@ -97,12 +100,14 @@ struct ContentView: View {
         }
         // Delete / Forward-Delete: remove the selected task.
         .onDeleteCommand {
+            hoverEngine.hoveredTaskID = nil
             selectionEngine.deleteSelection(context: modelContext)
         }
         // Space: start editing the selected task's title.
         .onKeyPress(.space) {
             guard selectionEngine.selectedTaskID != nil,
                   selectionEngine.editingField == nil else { return .ignored }
+            hoverEngine.hoveredTaskID = nil
             selectionEngine.beginEditingTitle()
             return .handled
         }
@@ -116,6 +121,7 @@ struct ContentView: View {
             guard selectionEngine.editingField == nil,
                   selectionEngine.focusedArea == .structured,
                   selectionEngine.selectedTaskID != nil else { return .ignored }
+            hoverEngine.hoveredTaskID = nil
             if isBacktab || press.modifiers.contains(.shift) {
                 selectionEngine.outdentSelection(context: modelContext)
             } else {

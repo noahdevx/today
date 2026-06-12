@@ -19,11 +19,20 @@ struct TaskSelectionModifier: ViewModifier {
     @Environment(SelectionEngine.self) private var selectionEngine
     @Environment(HoverLinkEngine.self) private var hoverEngine
 
-    /// True when this row's task is hovered or selected anywhere in the app.
-    /// Accent (not yellow) so the link reads as "same task" alongside the
-    /// accent selection ring without clashing with the orange NOW marking.
+    /// True when this row's task is the current link-highlight target.
+    ///
+    /// Hover and focus are exclusive: while any task is hovered, only the
+    /// hovered task is highlighted; otherwise the focused (selected) task is.
+    /// Focus interactions (click, arrow keys, search jump) clear the hover
+    /// state, so the last-used input decides which highlight is live. The
+    /// selection ring is independent and stays visible either way. Accent
+    /// (not yellow) so the link reads as "same task" alongside the accent
+    /// selection ring without clashing with the orange NOW marking.
     private var isLinkTarget: Bool {
-        hoverEngine.hoveredTaskID == task.id || selectionEngine.selectedTaskID == task.id
+        if let hoveredID = hoverEngine.hoveredTaskID {
+            return hoveredID == task.id
+        }
+        return selectionEngine.selectedTaskID == task.id
     }
 
     func body(content: Content) -> some View {
@@ -47,6 +56,9 @@ struct TaskSelectionModifier: ViewModifier {
             .simultaneousGesture(
                 TapGesture().onEnded {
                     selectionEngine.select(task, in: area)
+                    // A click is a focus interaction: hand the live highlight
+                    // to the focus side until the pointer enters another row.
+                    hoverEngine.hoveredTaskID = nil
                 }
             )
             // Accent-tinted background links every appearance of the task.
