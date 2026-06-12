@@ -47,6 +47,11 @@ struct MinimapView: View {
 /// node. Bar color encodes state: accent (and a taller bar) for the task
 /// hovered/selected anywhere, blue for Today-linked tasks, grey for completed
 /// ones, and a neutral tone for others.
+///
+/// The bars participate in the cross-area link in both directions: hovering a
+/// bar highlights the task's rows in the other areas, and clicking a bar
+/// reveals the task in the structured tree and scrolls it into view (like a
+/// code editor's minimap).
 private struct MinimapNode: View {
     let task: TodayTask
     let depth: Int
@@ -65,6 +70,23 @@ private struct MinimapNode: View {
                 .fill(barColor)
                 .frame(height: isHighlighted ? 6 : 4)
                 .padding(.leading, CGFloat(depth) * 6)
+                // Make the full bar width (thin as it is) hit-testable.
+                .contentShape(Rectangle())
+                // Hovering a bar highlights the task everywhere else. Only
+                // clear the shared state if this bar still owns it (the next
+                // bar's "enter" can arrive before this one's "exit").
+                .onHover { hovering in
+                    if hovering {
+                        hoverEngine.hoveredTaskID = task.id
+                    } else if hoverEngine.hoveredTaskID == task.id {
+                        hoverEngine.hoveredTaskID = nil
+                    }
+                }
+                // Clicking jumps the structured tree to this task (expanding
+                // collapsed ancestors), without changing the selection.
+                .onTapGesture {
+                    selectionEngine.revealAndScrollInStructured(task)
+                }
 
             ForEach(task.sortedChildren) { child in
                 MinimapNode(task: child, depth: depth + 1)

@@ -250,6 +250,28 @@ struct SelectionEngineTests {
         #expect(engine.scrollRequests.contains { $0.area == .structured && $0.taskID == child.id })
     }
 
+    /// A minimap click reveals the task in the tree and scrolls to it
+    /// without touching the selection.
+    @Test("revealAndScrollInStructured expands ancestors and scrolls, keeping selection")
+    func revealAndScrollKeepsSelection() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let engine = SelectionEngine()
+
+        let parent = TaskManager.createStructuredTask(title: "Parent", in: context)
+        let child = TaskManager.createStructuredTask(title: "Child", parent: parent, in: context)
+        let other = TaskManager.addToToday(title: "Other", in: context)
+        engine.select(other, in: .today)
+        engine.toggleCollapsed(parent.id)
+
+        engine.revealAndScrollInStructured(child)
+
+        #expect(!engine.collapsedIDs.contains(parent.id))
+        #expect(engine.scrollRequests.contains { $0.area == .structured && $0.taskID == child.id })
+        // The selection is untouched: minimap clicks navigate, they don't pick.
+        #expect(engine.selectedTaskID == other.id)
+    }
+
     /// A search jump scrolls both the home area's list and the structured
     /// tree; repeated jumps to the same task produce distinct requests.
     @Test("jump requests scrolls in the home area and the structured tree")
