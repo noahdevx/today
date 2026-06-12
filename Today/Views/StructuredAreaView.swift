@@ -1,12 +1,18 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Structured area: hierarchical tree of all tasks organized as projects and
-/// sub-tasks. Supports unlimited nesting, collapsible nodes, dragging tasks to
-/// the Today column, and visual markers for Today-linked tasks. The header shows
-/// the grand total of all task estimates.
+/// sub-tasks. Supports unlimited nesting, collapsible nodes, drag & drop both
+/// to the Today column and within the tree (reorder / re-parent), and Today
+/// state encoded in the row background. The header shows the grand total of
+/// all task estimates.
+///
+/// The recursive node view lives in `StructuredNodeView.swift`; the drop
+/// delegates in `StructuredDropDelegates.swift`.
 struct StructuredAreaView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SelectionEngine.self) private var selectionEngine
     @Environment(HoverLinkEngine.self) private var hoverEngine
 
     /// Every task in the store, sorted by structured position. Root tasks are
@@ -17,10 +23,22 @@ struct StructuredAreaView: View {
     /// Draft fields for the root-level "add task" input.
     @State private var newTitle = ""
     @State private var newMinutes = ""
+    /// True while a dragged task hovers over the root-tail drop area.
+    @State private var isTailTargeted = false
 
     /// Root-level tasks (no parent) in structured order.
     private var rootTasks: [TodayTask] {
         allTasks.filter { $0.parent == nil }
+    }
+
+    /// Ancestor IDs of the task hovered or selected anywhere in the app.
+    /// Injected into the tree so a collapsed node can stand in (highlighted)
+    /// for a linked task hidden inside its subtree.
+    private var linkedAncestorIDs: Set<UUID> {
+        let linkedID = hoverEngine.hoveredTaskID ?? selectionEngine.selectedTaskID
+        guard let linkedID,
+              let task = allTasks.first(where: { $0.id == linkedID }) else { return [] }
+        return Set(task.ancestors.map(\.id))
     }
 
     var body: some View {
@@ -41,6 +59,7 @@ struct StructuredAreaView: View {
                 }
             }
         }
+        .environment(\.linkedAncestorIDs, linkedAncestorIDs)
     }
 
     // MARK: - Root task input
@@ -78,12 +97,47 @@ struct StructuredAreaView: View {
 
     // MARK: - Tree
 
-    /// Scrollable tree of structured nodes, rendered recursively.
+    /// Scrollable tree of structured nodes, rendered recursively, with a
+    /// trailing drop area that moves a dragged task to the end of the root
+    /// level (so it can always be "un-nested" even when no row gap fits).
+    /// A ScrollViewReader keeps the keyboard/search selection in view.
     private var treeContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(rootTasks) { task in
-                    StructuredNodeView(task: task, depth: 0)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(rootTasks) { task in
+                        StructuredNodeView(task: task, depth: 0)
+                    }
+
+                    // Root-tail drop area: visible insertion line while targeted.
+                    Color.clear
+                        .frame(height: 28)
+                        .overlay(alignment: .top) {
+                            if isTailTargeted {
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color.accentColor)
+                                    .frame(height: 2)
+                            }
+                        }
+                        .onDrop(
+                            of: [.plainText],
+                            delegate: StructuredRootTailDropDelegate(
+                                engine: selectionEngine,
+                                context: modelContext,
+                                isTargeted: $isTailTargeted
+                            )
+                        )
+                }
+            }
+            // Scroll requests target this tree on any selection (row clicks
+            // in other areas included, so the Today <-> Structured link stays
+            // visible), arrow-key moves, and search jumps. Ancestors were
+            // already expanded by the engine in the same update, so the row
+            // exists by the time this fires.
+            .onChange(of: selectionEngine.scrollRequests) { _, requests in
+                guard let target = requests.first(where: { $0.area == .structured }) else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target.taskID)
                 }
             }
         }
@@ -91,226 +145,10 @@ struct StructuredAreaView: View {
     }
 }
 
-// MARK: - Tree node (recursive)
-
-/// A single node in the structured tree. Renders its own row and recursively
-/// renders sorted children. Supports collapsing, drag-to-Today, context-menu
-/// actions, and inline sub-task creation.
-struct StructuredNodeView: View {
-    let task: TodayTask
-    let depth: Int
-
-    @Environment(\.modelContext) private var modelContext
-    @Environment(HoverLinkEngine.self) private var hoverEngine
-
-    @State private var isExpanded = true
-    @State private var isAddingChild = false
-    @State private var newChildTitle = ""
-    @State private var newChildMinutes = ""
-
-    /// Whether the Today hover engine is highlighting this node right now.
-    private var isHighlighted: Bool {
-        hoverEngine.hoveredTaskID == task.id
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            nodeRow
-                .padding(.vertical, 4)
-                .padding(.leading, CGFloat(depth) * 16 + 4)
-                .padding(.trailing, 4)
-                .background(rowBackground)
-                .contentShape(Rectangle())
-                .draggable(task.id.uuidString)
-                .contextMenu { nodeContextMenu }
-
-            if isAddingChild {
-                addChildRow
-                    .padding(.leading, CGFloat(depth + 1) * 16 + 4)
-                    .padding(.trailing, 4)
-                    .padding(.vertical, 4)
-            }
-
-            if isExpanded {
-                ForEach(task.sortedChildren) { child in
-                    StructuredNodeView(task: child, depth: depth + 1)
-                }
-            }
-        }
-    }
-
-    // MARK: - Row content
-
-    /// The horizontal row: disclosure toggle, Today marker, title, time label.
-    private var nodeRow: some View {
-        HStack(spacing: 6) {
-            disclosureToggle
-            todayMarker
-            titleLabel
-
-            Spacer(minLength: 4)
-
-            timeLabel
-        }
-    }
-
-    /// Chevron toggle for expanding/collapsing children. Invisible spacer for
-    /// leaf nodes to keep titles aligned.
-    @ViewBuilder
-    private var disclosureToggle: some View {
-        if !task.children.isEmpty {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption2)
-                    .frame(width: 12)
-            }
-            .buttonStyle(.plain)
-        } else {
-            Spacer()
-                .frame(width: 12)
-        }
-    }
-
-    /// Visual marker indicating the task's relationship to the Today / Done areas.
-    /// Always occupies a fixed width so the title doesn't shift when the marker
-    /// appears or disappears.
-    private var todayMarker: some View {
-        Group {
-            if task.isInToday && !task.isDone {
-                Circle()
-                    .fill(.yellow)
-                    .frame(width: 6, height: 6)
-            } else if task.isDone {
-                Image(systemName: "checkmark")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            } else {
-                Color.clear
-            }
-        }
-        .frame(width: 10)
-    }
-
-    /// Task title, dimmed when the task is completed.
-    private var titleLabel: some View {
-        Text(task.title)
-            .lineLimit(1)
-            .foregroundStyle(task.isDone ? .secondary : .primary)
-    }
-
-    /// Time label: subtree total for nodes with children, own estimate for leaves.
-    /// Hidden when a leaf has no estimate.
-    @ViewBuilder
-    private var timeLabel: some View {
-        if !task.children.isEmpty {
-            Text(task.subtreeEstimateLabel)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-        } else if let label = task.estimateLabel {
-            Text(label)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    /// Background that glows when highlighted by the Today hover engine and
-    /// subtly tinted when the task is in Today.
-    private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(backgroundFill)
-    }
-
-    private var backgroundFill: Color {
-        if isHighlighted {
-            return .yellow.opacity(0.2)
-        }
-        if task.isInToday && !task.isDone {
-            return .yellow.opacity(0.06)
-        }
-        return .clear
-    }
-
-    // MARK: - Context menu
-
-    @ViewBuilder
-    private var nodeContextMenu: some View {
-        if !task.isInToday || task.isDone {
-            Button("Add to Today") {
-                TaskManager.addStructuredTaskToToday(task, in: modelContext)
-            }
-        }
-        if task.isInToday && !task.isDone {
-            Button("Remove from Today") {
-                TaskManager.removeFromToday(task, in: modelContext)
-            }
-        }
-
-        Divider()
-
-        Button("Add Sub-task") {
-            isAddingChild = true
-            isExpanded = true
-        }
-
-        Divider()
-
-        Button("Delete", role: .destructive) {
-            TaskManager.delete(task, in: modelContext)
-        }
-    }
-
-    // MARK: - Inline sub-task creation
-
-    /// Input row that appears below the node when the user chooses "Add Sub-task".
-    private var addChildRow: some View {
-        HStack(spacing: 6) {
-            TextField("Sub-task title", text: $newChildTitle)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(addChild)
-            TextField("min", text: $newChildMinutes)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 48)
-                .onSubmit(addChild)
-            Button(action: addChild) {
-                Image(systemName: "plus")
-            }
-            .disabled(newChildTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button {
-                isAddingChild = false
-                newChildTitle = ""
-                newChildMinutes = ""
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func addChild() {
-        let title = newChildTitle.trimmingCharacters(in: .whitespaces)
-        guard !title.isEmpty else { return }
-        let minutes = Int(newChildMinutes.trimmingCharacters(in: .whitespaces))
-            .flatMap { $0 > 0 ? $0 : nil }
-        TaskManager.createStructuredTask(
-            title: title,
-            estimatedMinutes: minutes,
-            parent: task,
-            in: modelContext
-        )
-        newChildTitle = ""
-        newChildMinutes = ""
-        isAddingChild = false
-    }
-}
-
 #Preview {
     StructuredAreaView()
         .frame(width: 300, height: 500)
         .environment(HoverLinkEngine())
+        .environment(SelectionEngine())
         .modelContainer(for: TodayTask.self, inMemory: true)
 }

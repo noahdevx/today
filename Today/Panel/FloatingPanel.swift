@@ -23,13 +23,19 @@ final class FloatingPanel: NSPanel {
         // Marks this as a utility/floating panel (panels behave differently from
         // normal windows, e.g. they don't become the app's main window).
         isFloatingPanel = true
-        // Keep the panel above ordinary windows so it works as a quick overlay.
+        // Keep the panel above ordinary windows whenever it is visible.
+        // Spotlight-style dismissal (AppDelegate hides the panel when the app
+        // deactivates) guarantees "visible" implies "in use", so the level
+        // never needs to change.
         level = .floating
         // Show on every Space and over full-screen apps, so the hotkey works
         // regardless of which Space/app is active.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        // Do NOT auto-hide when the app deactivates; visibility is controlled
-        // explicitly via the hotkey/menu instead.
+        // Hiding on deactivation is handled by AppDelegate (hidePanel in
+        // applicationDidResignActive) instead of this flag: the built-in
+        // behavior would also re-show the panel automatically whenever the
+        // app activates again (e.g. just to use Settings), which we don't
+        // want - the hotkey/menu is the only way to bring the panel back.
         hidesOnDeactivate = false
         // Keep the instance alive after closing so we can reuse it (paired with
         // ordering it out rather than closing).
@@ -70,22 +76,45 @@ final class FloatingPanel: NSPanel {
     /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
 
-    /// Float above other windows while the panel has keyboard focus so the
-    /// workspace stays visible while the user is working in it. Drop to
-    /// normal window level when the user clicks away to another app, so the
-    /// panel doesn't permanently obscure unrelated windows.
-    override func becomeKey() {
-        super.becomeKey()
-        level = .floating
-    }
-
-    override func resignKey() {
-        super.resignKey()
-        level = .normal
-    }
-
     /// Hide (not destroy) the panel when the user presses Escape.
     override func cancelOperation(_ sender: Any?) {
         orderOut(nil)
+    }
+
+    /// Routes Cmd-Z / Shift-Cmd-Z to the SwiftData undo manager.
+    ///
+    /// As a menu bar (LSUIElement) app there is no Edit menu to provide the
+    /// standard undo/redo key equivalents, so the panel resolves them itself.
+    /// While a text field is being edited (the first responder is the field
+    /// editor) the keys are left to the text system, which manages its own
+    /// undo stack for typing.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Only plain Cmd-Z / Shift-Cmd-Z are handled here.
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isUndo = modifiers == .command && event.charactersIgnoringModifiers == "z"
+        let isRedo = modifiers == [.command, .shift] && event.charactersIgnoringModifiers == "z"
+        guard isUndo || isRedo else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // Text editing in progress: defer to the field editor's own undo.
+        if firstResponder is NSTextView {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // Apply to the shared store's undo stack (changes are registered
+        // automatically by SwiftData).
+        guard let undoManager = AppState.shared.modelContainer.mainContext.undoManager else {
+            return super.performKeyEquivalent(with: event)
+        }
+        if isUndo, undoManager.canUndo {
+            undoManager.undo()
+            return true
+        }
+        if isRedo, undoManager.canRedo {
+            undoManager.redo()
+            return true
+        }
+        return true
     }
 }

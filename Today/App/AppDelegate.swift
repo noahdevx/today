@@ -38,6 +38,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager.register()
     }
 
+    // MARK: - Spotlight-style dismissal
+
+    /// Hide the panel when focus leaves the app (the user clicks another
+    /// app), Spotlight/Alfred-style.
+    ///
+    /// While visible the panel always floats on top; once the user switches
+    /// away it disappears entirely instead of lingering behind other windows.
+    /// This removes the buried-panel state that made re-surfacing unreliable.
+    /// The hotkey (or the menu bar item) brings it back.
+    func applicationDidResignActive(_ notification: Notification) {
+        hidePanel()
+    }
+
     // MARK: - Settings support
 
     /// Re-registers the global hotkey with the preset currently stored in
@@ -54,12 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Panel control
 
-    /// Shows the panel if hidden, hides it if visible. When the panel is
-    /// visible but lost focus (behind other windows after `resignKey` dropped
-    /// it from floating level), the hotkey brings it back to the front
-    /// instead of hiding it.
+    /// Shows the panel if hidden, hides it if visible. Since the panel hides
+    /// itself whenever the app loses focus, "visible" implies it is front and
+    /// active, so a plain visibility check is enough.
     func togglePanel() {
-        if let panel, panel.isVisible, panel.isKeyWindow {
+        if let panel, panel.isVisible {
             hidePanel()
         } else {
             showPanel()

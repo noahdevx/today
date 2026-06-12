@@ -129,6 +129,52 @@ struct TodayTaskPersistenceTests {
         #expect(root.subtreeEstimateLabel == "15m")
     }
 
+    /// isDescendant walks the parent chain at any depth.
+    @Test("isDescendant is true for subtree members only")
+    func isDescendantWalksChain() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let root = TodayTask(title: "Root")
+        let child = TodayTask(title: "Child")
+        let grandchild = TodayTask(title: "Grandchild")
+        let unrelated = TodayTask(title: "Unrelated")
+        context.insert(root)
+        context.insert(child)
+        context.insert(grandchild)
+        context.insert(unrelated)
+        child.parent = root
+        grandchild.parent = child
+        try context.save()
+
+        #expect(child.isDescendant(of: root))
+        #expect(grandchild.isDescendant(of: root))
+        #expect(grandchild.isDescendant(of: child))
+        #expect(!root.isDescendant(of: child))
+        #expect(!unrelated.isDescendant(of: root))
+        #expect(!root.isDescendant(of: root))
+    }
+
+    /// ancestors lists the parent chain from the closest parent to the root.
+    @Test("ancestors returns the chain from parent to root")
+    func ancestorsChain() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let root = TodayTask(title: "Root")
+        let child = TodayTask(title: "Child")
+        let grandchild = TodayTask(title: "Grandchild")
+        context.insert(root)
+        context.insert(child)
+        context.insert(grandchild)
+        child.parent = root
+        grandchild.parent = child
+        try context.save()
+
+        #expect(grandchild.ancestors.map(\.title) == ["Child", "Root"])
+        #expect(root.ancestors.isEmpty)
+    }
+
     /// sortedChildren returns children in structuredOrder.
     @Test("sortedChildren returns children ordered by structuredOrder")
     func sortedChildrenOrder() throws {

@@ -119,4 +119,29 @@ extension TodayTask {
         guard let scheduledAt else { return false }
         return scheduledAt <= date
     }
+
+    /// True when this task sits anywhere below `possibleAncestor` in the tree.
+    /// Walks the parent chain (cost bounded by tree depth). Used to reject
+    /// drops that would create a cycle, e.g. moving a task into its own subtree.
+    func isDescendant(of possibleAncestor: TodayTask) -> Bool {
+        var current = parent
+        while let node = current {
+            if node.id == possibleAncestor.id { return true }
+            current = node.parent
+        }
+        return false
+    }
+
+    /// The chain of ancestors from this task's parent up to the root. Used by
+    /// the search dropdown (parent path display) and to expand collapsed
+    /// ancestors when jumping to a search result.
+    var ancestors: [TodayTask] {
+        var chain: [TodayTask] = []
+        var current = parent
+        while let node = current {
+            chain.append(node)
+            current = node.parent
+        }
+        return chain
+    }
 }

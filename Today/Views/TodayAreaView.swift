@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Today area (left-most column): cross-project, single-column ordering of what to
 /// tackle today. Backed by SwiftData -- tasks are added, reordered by dragging,
@@ -10,8 +11,8 @@ struct TodayAreaView: View {
 
     /// The shared context for all mutations (injected via `.modelContainer`).
     @Environment(\.modelContext) private var modelContext
-    /// Hover engine for the Today → Structured/Map highlight link.
-    @Environment(HoverLinkEngine.self) private var hoverEngine
+    /// Selection engine; carries the in-flight dragged task for drops.
+    @Environment(SelectionEngine.self) private var selectionEngine
 
     /// Active Today tasks: placed in Today (`todayOrder != nil`) and not yet done,
     /// sorted by their Today position. The query updates automatically on changes.
@@ -47,12 +48,17 @@ struct TodayAreaView: View {
                     .stroke(Color.yellow.opacity(0.5), lineWidth: 2)
             }
         }
-        // Accept drops of structured task IDs (UUID strings).
-        .dropDestination(for: String.self) { items, _ in
-            handleExternalDrop(items)
-        } isTargeted: { targeted in
-            isDropTargeted = targeted
-        }
+        // Accept drops of structured tasks (resolved via the selection
+        // engine's in-flight drag state, which is synchronous and reliable
+        // for in-app drags).
+        .onDrop(
+            of: [.plainText],
+            delegate: TodayColumnDropDelegate(
+                engine: selectionEngine,
+                context: modelContext,
+                isTargeted: $isDropTargeted
+            )
+        )
         // Invisible button that gives the panel a Cmd-N "new task" shortcut:
         // it focuses the title field. opacity(0) keeps the button in the
         // hierarchy (so the shortcut stays active) without rendering anything.
@@ -100,33 +106,76 @@ struct TodayAreaView: View {
     }
 
     /// The ordered, drag-reorderable list of today's tasks. `.onMove` enables the
-    /// native drag handle; swiping a row reveals Delete.
+    /// native drag handle; swiping a row reveals Delete. The head row is the
+    /// "Now" task and gets a highlighted treatment. A ScrollViewReader keeps
+    /// the keyboard/search selection in view.
     private var taskList: some View {
-        List {
-            ForEach(tasks) { task in
+        ScrollViewReader { proxy in
+            List {
+                ForEach(tasks) { task in
+                    // Hover reporting and the cross-area highlight come from
+                    // the shared taskSelectable modifier inside todayRow.
+                    todayRow(for: task)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                TaskManager.delete(task, in: modelContext)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        // Anchor for ScrollViewReader (selection follow).
+                        .id(task.id)
+                }
+                .onMove(perform: moveTasks)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            // Scroll requests target this list on arrow-key moves and search
+            // jumps so the relevant row is always brought into view.
+            .onChange(of: selectionEngine.scrollRequests) { _, requests in
+                guard let target = requests.first(where: { $0.area == .today }) else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target.taskID)
+                }
+            }
+        }
+        // Let the list fill the remaining column height.
+        .frame(maxHeight: .infinity)
+    }
+
+    /// One Today row. The first task in the column is the "Now" task - the one
+    /// being worked on right now - and is emphasized with a NOW badge and a
+    /// yellow background so the eye lands there first. Rendering stays inside
+    /// the single ForEach so `.onMove` reordering keeps working; whichever task
+    /// is dragged to the top becomes Now automatically. While the task is
+    /// being edited the static row swaps for the inline editor.
+    @ViewBuilder
+    private func todayRow(for task: TodayTask) -> some View {
+        let isNow = task.id == tasks.first?.id
+        VStack(alignment: .leading, spacing: 2) {
+            if isNow {
+                Text("NOW")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.orange)
+            }
+            if selectionEngine.isEditing(task.id, in: .today) {
+                InlineTaskEditor(task: task, area: .today)
+            } else {
                 TaskRow(task: task) {
                     TaskManager.complete(task, in: modelContext)
                 }
-                // Update the hover engine so Structured and Map highlight this task.
-                .onHover { hovering in
-                    hoverEngine.hoveredTaskID = hovering ? task.id : nil
-                }
-                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-                .listRowSeparator(.hidden)
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        TaskManager.delete(task, in: modelContext)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
             }
-            .onMove(perform: moveTasks)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        // Let the list fill the remaining column height.
-        .frame(maxHeight: .infinity)
+        .padding(isNow ? 6 : 0)
+        .background {
+            if isNow {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(.yellow.opacity(0.25))
+            }
+        }
+        .taskSelectable(task, in: .today)
     }
 
     // MARK: - Actions
@@ -148,18 +197,41 @@ struct TodayAreaView: View {
     private func moveTasks(from source: IndexSet, to destination: Int) {
         TaskManager.reorderToday(tasks, from: source, to: destination, in: modelContext)
     }
+}
 
-    /// Handles a drop of structured task IDs (UUID strings) into the Today
-    /// column. Each task is looked up by ID and added to Today if it isn't
-    /// there already.
-    private func handleExternalDrop(_ items: [String]) -> Bool {
-        var handled = false
-        for item in items {
-            guard let uuid = UUID(uuidString: item),
-                  let task = TaskManager.findTask(id: uuid, in: modelContext) else { continue }
-            TaskManager.addStructuredTaskToToday(task, in: modelContext)
-            handled = true
-        }
-        return handled
+// MARK: - Column drop delegate
+
+/// Drop delegate for the whole Today column: dropping a structured task here
+/// adds it to Today (the task also stays in the structured tree). The dragged
+/// task is resolved through `SelectionEngine.draggedTaskID`, set by the drag
+/// source in the structured tree.
+@MainActor
+struct TodayColumnDropDelegate: DropDelegate {
+    /// Shared engine carrying the in-flight dragged task ID.
+    let engine: SelectionEngine
+    /// Context for the add-to-Today mutation.
+    let context: ModelContext
+    /// Targeting flag bound to the column's border highlight.
+    @Binding var isTargeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        engine.draggedTaskID != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = true
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        guard let draggedID = engine.draggedTaskID,
+              let task = TaskManager.findTask(id: draggedID, in: context) else { return false }
+        engine.draggedTaskID = nil
+        TaskManager.addStructuredTaskToToday(task, in: context)
+        return true
     }
 }
