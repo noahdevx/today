@@ -19,10 +19,16 @@ struct TaskSelectionModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(Rectangle())
-            // Click selects (and re-focuses the row's area).
-            .onTapGesture {
-                selectionEngine.select(task.id, in: area)
-            }
+            // Click selects (and re-focuses the row's area). A simultaneous
+            // gesture (instead of .onTapGesture) keeps the recognizer from
+            // competing with drag interactions: an exclusive tap recognizer
+            // delays/steals the mouse-down that List reordering and .onDrag
+            // need, which made rows hard to grab.
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    selectionEngine.select(task.id, in: area)
+                }
+            )
             // Accent ring marks the selected row.
             .overlay {
                 if selectionEngine.isSelected(task.id, in: area) {

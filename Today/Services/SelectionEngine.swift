@@ -39,12 +39,6 @@ final class SelectionEngine {
         case down
     }
 
-    /// Horizontal navigation direction (left/right arrow keys).
-    enum HorizontalMove {
-        case left
-        case right
-    }
-
     /// The area that currently owns the keyboard cursor, or nil when none.
     var focusedArea: AreaKind?
     /// The selected task, or nil when nothing is selected.
@@ -149,19 +143,54 @@ final class SelectionEngine {
         selectedTaskID = ids[next]
     }
 
-    /// Moves the keyboard cursor to the neighboring area (left/right arrows),
-    /// selecting that area's first visible task (for Today that is the Now
-    /// task). A hidden Done column is skipped.
-    func moveArea(_ move: HorizontalMove, context: ModelContext) {
-        let areas = navigableAreas
-        let area = focusedArea ?? .today
-        guard let index = areas.firstIndex(of: area) else { return }
-        let nextIndex = (move == .right) ? min(index + 1, areas.count - 1) : max(index - 1, 0)
-        let target = areas[nextIndex]
-        guard target != area else { return }
-        focusedArea = target
-        selectedTaskID = visibleTaskIDs(in: target, context: context).first
-        editingField = nil
+    /// Right arrow on a structured selection: expands a collapsed node, or
+    /// steps into the first child when already expanded (standard outline
+    /// behavior). No-op outside the structured area or on leaves.
+    func expandSelection(context: ModelContext) {
+        guard focusedArea == .structured,
+              let selectedID = selectedTaskID,
+              let task = TaskManager.findTask(id: selectedID, in: context),
+              !task.children.isEmpty else { return }
+        if collapsedIDs.contains(selectedID) {
+            collapsedIDs.remove(selectedID)
+        } else if let firstChild = task.sortedChildren.first {
+            selectedTaskID = firstChild.id
+        }
+    }
+
+    /// Left arrow on a structured selection: collapses an expanded node, or
+    /// moves the selection up to the parent when the node is a leaf or
+    /// already collapsed (standard outline behavior).
+    func collapseSelection(context: ModelContext) {
+        guard focusedArea == .structured,
+              let selectedID = selectedTaskID,
+              let task = TaskManager.findTask(id: selectedID, in: context) else { return }
+        if !task.children.isEmpty, !collapsedIDs.contains(selectedID) {
+            collapsedIDs.insert(selectedID)
+        } else if let parent = task.parent {
+            selectedTaskID = parent.id
+        }
+    }
+
+    /// Tab on a structured selection: nests the task under its previous
+    /// sibling (outliner-style indent) and expands that new parent so the
+    /// task stays visible. No-op when the task has no previous sibling.
+    func indentSelection(context: ModelContext) {
+        guard focusedArea == .structured,
+              let selectedID = selectedTaskID,
+              let task = TaskManager.findTask(id: selectedID, in: context) else { return }
+        guard let newParent = TaskManager.indentStructuredTask(task, in: context) else { return }
+        collapsedIDs.remove(newParent.id)
+    }
+
+    /// Shift-Tab on a structured selection: moves the task out of its parent,
+    /// placing it right after the parent (outliner-style outdent). No-op for
+    /// root tasks.
+    func outdentSelection(context: ModelContext) {
+        guard focusedArea == .structured,
+              let selectedID = selectedTaskID,
+              let task = TaskManager.findTask(id: selectedID, in: context) else { return }
+        TaskManager.outdentStructuredTask(task, in: context)
     }
 
     /// Deletes the selected task and keeps the keyboard flow going by
@@ -235,12 +264,6 @@ final class SelectionEngine {
     }
 
     // MARK: - Visible order
-
-    /// The areas reachable with left/right arrows, in visual order. Done is
-    /// included only while its column is shown.
-    private var navigableAreas: [AreaKind] {
-        AreaKind.allCases.filter { $0 != .done || isDoneVisible }
-    }
 
     /// The IDs of the tasks currently visible in the given area, top to
     /// bottom. Each case mirrors the corresponding area view's `@Query`

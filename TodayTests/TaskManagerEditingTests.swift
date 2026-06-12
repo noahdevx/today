@@ -142,6 +142,51 @@ struct TaskManagerEditingTests {
         _ = childA // fixture kept alive in the store
     }
 
+    /// indent nests a task under its previous sibling; the first sibling has
+    /// nothing to indent under and is left alone.
+    @Test("indentStructuredTask nests under the previous sibling")
+    func indentNestsUnderPreviousSibling() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let first = TaskManager.createStructuredTask(title: "First", in: context) // root 0
+        let second = TaskManager.createStructuredTask(title: "Second", in: context) // root 1
+
+        let newParent = TaskManager.indentStructuredTask(second, in: context)
+
+        #expect(newParent?.id == first.id)
+        #expect(second.parent?.id == first.id)
+        #expect(first.sortedChildren.map(\.title) == ["Second"])
+
+        // "First" is now the only root; indenting it is a no-op.
+        #expect(TaskManager.indentStructuredTask(first, in: context) == nil)
+        #expect(first.parent == nil)
+    }
+
+    /// outdent moves a child right after its (former) parent; root tasks are
+    /// unaffected.
+    @Test("outdentStructuredTask moves a child right after its parent")
+    func outdentMovesAfterParent() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+
+        let parent = TaskManager.createStructuredTask(title: "Parent", in: context) // root 0
+        let child = TaskManager.createStructuredTask(title: "Child", parent: parent, in: context)
+        let tail = TaskManager.createStructuredTask(title: "Tail", in: context) // root 1
+
+        TaskManager.outdentStructuredTask(child, in: context)
+
+        #expect(child.parent == nil)
+        #expect(parent.structuredOrder == 0)
+        #expect(child.structuredOrder == 1)
+        #expect(tail.structuredOrder == 2)
+
+        // Root task: no parent to step out of, so nothing changes.
+        TaskManager.outdentStructuredTask(parent, in: context)
+        #expect(parent.parent == nil)
+        #expect(parent.structuredOrder == 0)
+    }
+
     /// Moving a task into its own subtree (or itself) is rejected.
     @Test("moveStructuredTask rejects cycles (self and descendants)")
     func moveRejectsCycles() throws {

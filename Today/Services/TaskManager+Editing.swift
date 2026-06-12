@@ -94,6 +94,27 @@ extension TaskManager {
         moveStructuredTask(task, toParent: reference.parent, at: index + 1, in: context)
     }
 
+    /// Nests `task` under its previous sibling (outliner-style indent, bound
+    /// to Tab in the structured tree). Returns the new parent so the caller
+    /// can expand it, or nil when the task is first among its siblings and
+    /// there is nothing to indent under.
+    @discardableResult
+    static func indentStructuredTask(_ task: TodayTask, in context: ModelContext) -> TodayTask? {
+        let siblings = structuredSiblings(under: task.parent, in: context)
+        guard let index = siblings.firstIndex(where: { $0.id == task.id }), index > 0 else { return nil }
+        let newParent = siblings[index - 1]
+        moveStructuredTask(task, toParent: newParent, in: context)
+        return newParent
+    }
+
+    /// Moves `task` out of its parent, placing it immediately after that
+    /// parent among the parent's siblings (outliner-style outdent, bound to
+    /// Shift-Tab in the structured tree). No-op for root tasks.
+    static func outdentStructuredTask(_ task: TodayTask, in context: ModelContext) {
+        guard let parent = task.parent else { return }
+        moveStructuredTask(task, after: parent, in: context)
+    }
+
     // MARK: - Search
 
     /// Case-insensitive title search for the search dropdown. Empty queries

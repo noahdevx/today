@@ -80,33 +80,73 @@ struct SelectionEngineTests {
         #expect(engine.selectedTaskID == first.id)
     }
 
-    /// Left/right moves between areas, skipping the hidden Done column and
-    /// selecting the target area's first task.
-    @Test("moveArea moves between areas and skips a hidden Done column")
-    func moveAreaSkipsHiddenDone() throws {
+    /// Right arrow expands a collapsed node first, then steps into the first
+    /// child on the next press (standard outline behavior).
+    @Test("expandSelection expands a collapsed node then steps into children")
+    func expandSelectionBehavior() throws {
         let container = try makeContainer()
         let context = container.mainContext
         let engine = SelectionEngine()
 
-        let today = TaskManager.addToToday(title: "T", in: context)
-        let structured = TaskManager.createStructuredTask(title: "S", in: context)
+        let root = TaskManager.createStructuredTask(title: "Root", in: context)
+        let child = TaskManager.createStructuredTask(title: "Child", parent: root, in: context)
+        engine.toggleCollapsed(root.id)
+        engine.select(root.id, in: .structured)
 
-        engine.select(today.id, in: .today)
+        // First press: expand; the selection stays on the node.
+        engine.expandSelection(context: context)
+        #expect(!engine.collapsedIDs.contains(root.id))
+        #expect(engine.selectedTaskID == root.id)
 
-        // Done is hidden: right from Today lands on Structured directly.
-        engine.moveArea(.right, context: context)
-        #expect(engine.focusedArea == .structured)
-        // Today task is at the structured root too, ordered before "S"? No:
-        // addToToday assigned root order 0, createStructuredTask got 1, so the
-        // first visible structured row is the Today task itself.
-        #expect(engine.selectedTaskID == today.id)
+        // Second press: step into the first child.
+        engine.expandSelection(context: context)
+        #expect(engine.selectedTaskID == child.id)
+    }
 
-        // With Done visible, left from Structured lands on Done.
-        engine.isDoneVisible = true
-        engine.moveArea(.left, context: context)
-        #expect(engine.focusedArea == .done)
+    /// Left arrow climbs from a leaf to its parent, collapses an expanded
+    /// node, and is a no-op on a collapsed root.
+    @Test("collapseSelection collapses or climbs to the parent")
+    func collapseSelectionBehavior() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let engine = SelectionEngine()
 
-        _ = structured // referenced to keep the fixture alive in the store
+        let root = TaskManager.createStructuredTask(title: "Root", in: context)
+        let child = TaskManager.createStructuredTask(title: "Child", parent: root, in: context)
+        engine.select(child.id, in: .structured)
+
+        // Leaf: climb to the parent.
+        engine.collapseSelection(context: context)
+        #expect(engine.selectedTaskID == root.id)
+
+        // Expanded parent: collapse it, selection stays.
+        engine.collapseSelection(context: context)
+        #expect(engine.collapsedIDs.contains(root.id))
+        #expect(engine.selectedTaskID == root.id)
+
+        // Collapsed root (no parent): nothing left to do.
+        engine.collapseSelection(context: context)
+        #expect(engine.selectedTaskID == root.id)
+    }
+
+    /// Tab indents the selection under its previous sibling and expands the
+    /// new parent so the moved row stays visible.
+    @Test("indentSelection nests under the previous sibling and reveals it")
+    func indentSelectionNests() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let engine = SelectionEngine()
+
+        let first = TaskManager.createStructuredTask(title: "First", in: context)
+        let second = TaskManager.createStructuredTask(title: "Second", in: context)
+        engine.toggleCollapsed(first.id)
+        engine.select(second.id, in: .structured)
+
+        engine.indentSelection(context: context)
+
+        #expect(second.parent?.id == first.id)
+        // The new parent was expanded so the indented row stays visible.
+        #expect(!engine.collapsedIDs.contains(first.id))
     }
 
     /// Deleting keeps the flow going by selecting the row that took the slot.

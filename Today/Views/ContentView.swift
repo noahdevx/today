@@ -16,6 +16,10 @@ struct ContentView: View {
     /// App-wide selection, keyboard-navigation, editing, and tree state.
     /// Owns the Done-column visibility so navigation/search can open it.
     @State private var selectionEngine = SelectionEngine()
+    /// Keyboard focus of the panel content itself. Programmatically restored
+    /// after a task gets selected (row click, search jump) so the arrow keys
+    /// work immediately instead of staying trapped in the last text field.
+    @FocusState private var isPanelFocused: Bool
 
     /// Active Today tasks in display order; the head of this list is the "Now"
     /// task, published app-wide via the `nowTaskID` environment key.
@@ -78,13 +82,16 @@ struct ContentView: View {
         // even before any control is clicked; hide the focus ring.
         .focusable()
         .focusEffectDisabled()
-        // Arrow keys: up/down move within the area, left/right switch areas.
+        .focused($isPanelFocused)
+        // Arrow keys: up/down move within the area; in the structured tree,
+        // right expands (or steps into) and left collapses (or steps out of)
+        // the selected node, standard outline-view style.
         .onMoveCommand { direction in
             switch direction {
             case .up: selectionEngine.moveSelection(.up, context: modelContext)
             case .down: selectionEngine.moveSelection(.down, context: modelContext)
-            case .left: selectionEngine.moveArea(.left, context: modelContext)
-            case .right: selectionEngine.moveArea(.right, context: modelContext)
+            case .left: selectionEngine.collapseSelection(context: modelContext)
+            case .right: selectionEngine.expandSelection(context: modelContext)
             @unknown default: break
             }
         }
@@ -99,11 +106,36 @@ struct ContentView: View {
             selectionEngine.beginEditingTitle()
             return .handled
         }
+        // Tab / Shift-Tab on a structured selection (outside editing):
+        // outliner-style indent under the previous sibling / outdent next to
+        // the parent. Shift-Tab arrives as a "backtab" character, so both
+        // spellings are checked.
+        .onKeyPress(phases: .down) { press in
+            let isBacktab = press.characters == "\u{19}"
+            guard press.key == .tab || isBacktab else { return .ignored }
+            guard selectionEngine.editingField == nil,
+                  selectionEngine.focusedArea == .structured,
+                  selectionEngine.selectedTaskID != nil else { return .ignored }
+            if isBacktab || press.modifiers.contains(.shift) {
+                selectionEngine.outdentSelection(context: modelContext)
+            } else {
+                selectionEngine.indentSelection(context: modelContext)
+            }
+            return .handled
+        }
         // Escape: cancel editing, then clear selection, then hide the panel
         // (standard staged dismissal).
         .onExitCommand {
             if !selectionEngine.handleEscape() {
                 AppDelegate.shared?.hidePanel()
+            }
+        }
+        // Whenever a task gets selected outside editing (row click, search
+        // jump, programmatic select), pull keyboard focus back onto the
+        // panel so the arrow keys respond immediately.
+        .onChange(of: selectionEngine.selectedTaskID) { _, newID in
+            if newID != nil, selectionEngine.editingField == nil {
+                isPanelFocused = true
             }
         }
         // Start with the keyboard cursor on the Now task so the panel opens
@@ -112,6 +144,7 @@ struct ContentView: View {
             if selectionEngine.selectedTaskID == nil, let nowID = todayTasks.first?.id {
                 selectionEngine.select(nowID, in: .today)
             }
+            isPanelFocused = true
         }
     }
 

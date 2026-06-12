@@ -70,15 +70,27 @@ final class FloatingPanel: NSPanel {
     /// redesign, where this override becomes required.
     override var canBecomeKey: Bool { true }
 
-    /// Request app activation whenever the panel becomes key.
+    /// Surfaces the panel on any click while the app is inactive.
     ///
-    /// Clicking a panel of a menu bar (LSUIElement) app makes the window key,
-    /// but does not always activate the app itself. Without activation the
-    /// system can hand key status straight back to the previously active app,
-    /// which made the panel fall behind other windows right after clicking it.
-    /// The window level itself is managed per app-activation in AppDelegate
-    /// (not here), so window-to-window focus changes inside the app (e.g.
-    /// opening Settings) no longer drop the panel to the back.
+    /// Clicking a (partially covered) panel of a menu bar (LSUIElement) app
+    /// does not reliably activate the app: the cooperative `activate()`
+    /// request can be deferred or denied, the panel never reaches the
+    /// floating level again, and it stays buried behind other windows.
+    /// Intercepting the raw click is the dependable hook: order the panel
+    /// to the front layer-wise (works regardless of activation) and request
+    /// activation so keyboard focus follows.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, !NSApp.isActive {
+            orderFrontRegardless()
+            NSApp.activate()
+        }
+        super.sendEvent(event)
+    }
+
+    /// Request app activation whenever the panel becomes key (e.g. shown via
+    /// the hotkey). The window level itself is managed per app-activation in
+    /// AppDelegate, so window-to-window focus changes inside the app (e.g.
+    /// opening Settings) don't drop the panel to the back.
     override func becomeKey() {
         super.becomeKey()
         NSApp.activate()
