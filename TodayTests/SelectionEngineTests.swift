@@ -91,7 +91,7 @@ struct SelectionEngineTests {
         let root = TaskManager.createStructuredTask(title: "Root", in: context)
         let child = TaskManager.createStructuredTask(title: "Child", parent: root, in: context)
         engine.toggleCollapsed(root.id)
-        engine.select(root.id, in: .structured)
+        engine.select(root, in: .structured)
 
         // First press: expand; the selection stays on the node.
         engine.expandSelection(context: context)
@@ -113,7 +113,7 @@ struct SelectionEngineTests {
 
         let root = TaskManager.createStructuredTask(title: "Root", in: context)
         let child = TaskManager.createStructuredTask(title: "Child", parent: root, in: context)
-        engine.select(child.id, in: .structured)
+        engine.select(child, in: .structured)
 
         // Leaf: climb to the parent.
         engine.collapseSelection(context: context)
@@ -140,7 +140,7 @@ struct SelectionEngineTests {
         let first = TaskManager.createStructuredTask(title: "First", in: context)
         let second = TaskManager.createStructuredTask(title: "Second", in: context)
         engine.toggleCollapsed(first.id)
-        engine.select(second.id, in: .structured)
+        engine.select(second, in: .structured)
 
         engine.indentSelection(context: context)
 
@@ -159,7 +159,7 @@ struct SelectionEngineTests {
         let first = TaskManager.addToToday(title: "First", in: context)
         let second = TaskManager.addToToday(title: "Second", in: context)
 
-        engine.select(first.id, in: .today)
+        engine.select(first, in: .today)
         engine.deleteSelection(context: context)
 
         #expect(TaskManager.findTask(id: first.id, in: context) == nil)
@@ -177,7 +177,7 @@ struct SelectionEngineTests {
         let first = TaskManager.addToToday(title: "First", in: context)
         let second = TaskManager.addToToday(title: "Second", in: context)
 
-        engine.select(first.id, in: .today)
+        engine.select(first, in: .today)
         engine.editingField = .minutes
         engine.editNextTask(context: context)
         #expect(engine.selectedTaskID == second.id)
@@ -226,6 +226,49 @@ struct SelectionEngineTests {
         #expect(!engine.collapsedIDs.contains(root.id))
         #expect(engine.focusedArea == .structured)
         #expect(engine.selectedTaskID == child.id)
+    }
+
+    /// Selecting a task in any area reveals it in the structured tree:
+    /// collapsed ancestors expand and a structured scroll request is queued.
+    @Test("select reveals the task in the structured tree and requests a scroll")
+    func selectRevealsInStructured() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let engine = SelectionEngine()
+
+        // A nested task that is also in Today, hidden under a collapsed parent.
+        let parent = TaskManager.createStructuredTask(title: "Parent", in: context)
+        let child = TaskManager.createStructuredTask(title: "Child", parent: parent, in: context)
+        TaskManager.addStructuredTaskToToday(child, in: context)
+        engine.toggleCollapsed(parent.id)
+
+        // Clicking the task's row in the Today column...
+        engine.select(child, in: .today)
+
+        // ...expands the collapsed parent and asks the tree to scroll to it.
+        #expect(!engine.collapsedIDs.contains(parent.id))
+        #expect(engine.scrollRequests.contains { $0.area == .structured && $0.taskID == child.id })
+    }
+
+    /// A search jump scrolls both the home area's list and the structured
+    /// tree; repeated jumps to the same task produce distinct requests.
+    @Test("jump requests scrolls in the home area and the structured tree")
+    func jumpRequestsScrolls() throws {
+        let container = try makeContainer()
+        let context = container.mainContext
+        let engine = SelectionEngine()
+
+        let task = TaskManager.addToToday(title: "T", in: context)
+        engine.jump(to: task)
+
+        #expect(engine.scrollRequests.contains { $0.area == .today && $0.taskID == task.id })
+        #expect(engine.scrollRequests.contains { $0.area == .structured && $0.taskID == task.id })
+
+        // Jumping again must change the request value (new generation) so
+        // observers fire even for the same task.
+        let firstBatch = engine.scrollRequests
+        engine.jump(to: task)
+        #expect(engine.scrollRequests != firstBatch)
     }
 
     /// homeArea mirrors the area queries' membership rules.

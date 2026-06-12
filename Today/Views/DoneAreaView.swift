@@ -71,10 +71,13 @@ struct DoneAreaView: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    // Follow the selection so the selected row stays visible.
-                    .onChange(of: selectionEngine.selectedTaskID) { _, newID in
-                        guard selectionEngine.focusedArea == .done, let newID else { return }
-                        proxy.scrollTo(newID)
+                    // Scroll requests target this list on arrow-key moves and
+                    // search jumps so the relevant row is brought into view.
+                    .onChange(of: selectionEngine.scrollRequests) { _, requests in
+                        guard let target = requests.first(where: { $0.area == .done }) else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(target.taskID)
+                        }
                     }
                 }
                 .frame(maxHeight: .infinity)

@@ -26,7 +26,7 @@ struct TaskSelectionModifier: ViewModifier {
             // need, which made rows hard to grab.
             .simultaneousGesture(
                 TapGesture().onEnded {
-                    selectionEngine.select(task.id, in: area)
+                    selectionEngine.select(task, in: area)
                 }
             )
             // Accent ring marks the selected row.

@@ -141,8 +141,8 @@ struct ContentView: View {
         // Start with the keyboard cursor on the Now task so the panel opens
         // ready to work on what matters first.
         .onAppear {
-            if selectionEngine.selectedTaskID == nil, let nowID = todayTasks.first?.id {
-                selectionEngine.select(nowID, in: .today)
+            if selectionEngine.selectedTaskID == nil, let nowTask = todayTasks.first {
+                selectionEngine.select(nowTask, in: .today)
             }
             isPanelFocused = true
         }

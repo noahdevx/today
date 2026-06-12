@@ -117,11 +117,16 @@ struct StructuredAreaView: View {
                         )
                 }
             }
-            // Follow the selection (arrow keys / search jump) so the selected
-            // row stays visible.
-            .onChange(of: selectionEngine.selectedTaskID) { _, newID in
-                guard selectionEngine.focusedArea == .structured, let newID else { return }
-                proxy.scrollTo(newID)
+            // Scroll requests target this tree on any selection (row clicks
+            // in other areas included, so the Today <-> Structured link stays
+            // visible), arrow-key moves, and search jumps. Ancestors were
+            // already expanded by the engine in the same update, so the row
+            // exists by the time this fires.
+            .onChange(of: selectionEngine.scrollRequests) { _, requests in
+                guard let target = requests.first(where: { $0.area == .structured }) else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(target.taskID)
+                }
             }
         }
         .frame(maxHeight: .infinity)

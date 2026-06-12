@@ -39,6 +39,18 @@ final class SelectionEngine {
         case down
     }
 
+    /// One-shot request asking an area's list to scroll a task into view.
+    /// `generation` increments per batch so repeating a request for the same
+    /// task still changes the value and re-triggers view `onChange` observers.
+    struct ScrollRequest: Equatable {
+        /// The area whose list should scroll.
+        let area: AreaKind
+        /// The task to bring into view.
+        let taskID: UUID
+        /// Monotonic batch counter (see above).
+        let generation: Int
+    }
+
     /// The area that currently owns the keyboard cursor, or nil when none.
     var focusedArea: AreaKind?
     /// The selected task, or nil when nothing is selected.
@@ -56,14 +68,37 @@ final class SelectionEngine {
     /// to suppress invalid-target feedback (self / own subtree) synchronously,
     /// which the async NSItemProvider payload alone can't provide.
     var draggedTaskID: UUID?
+    /// The latest batch of scroll requests. Area views observe this and
+    /// scroll their ScrollViewReader when a request targets them.
+    private(set) var scrollRequests: [ScrollRequest] = []
+    /// Backs `ScrollRequest.generation` (see its doc comment).
+    private var scrollGeneration = 0
 
     // MARK: - Selection
 
     /// Selects a task (pointer click or programmatic) and ends any editing.
-    func select(_ taskID: UUID?, in area: AreaKind) {
+    ///
+    /// Selecting also keeps the Today <-> Structured link visible: the task's
+    /// collapsed ancestors in the structured tree are expanded and the tree
+    /// scrolls the task into view, mirroring the hover-highlight behavior.
+    func select(_ task: TodayTask, in area: AreaKind) {
         focusedArea = area
-        selectedTaskID = taskID
+        selectedTaskID = task.id
         editingField = nil
+        // Every task lives in the structured tree; reveal it there. The
+        // clicked row itself is already on screen, so no request is needed
+        // for the clicked area.
+        revealInStructured(task)
+        requestScroll([(.structured, task.id)])
+    }
+
+    /// Queues a batch of scroll requests for area lists to consume. Replaces
+    /// the previous batch: only the latest navigation matters.
+    private func requestScroll(_ targets: [(area: AreaKind, taskID: UUID)]) {
+        scrollGeneration += 1
+        scrollRequests = targets.map {
+            ScrollRequest(area: $0.area, taskID: $0.taskID, generation: scrollGeneration)
+        }
     }
 
     /// True when the given task, in the given area, is the current selection.
@@ -126,7 +161,8 @@ final class SelectionEngine {
     /// Moves the selection one row up/down inside the focused area. With no
     /// selection yet, enters the list at the edge (top for down, bottom for
     /// up). The selection stops at the ends rather than wrapping, matching
-    /// standard macOS list behavior.
+    /// standard macOS list behavior. The list scrolls to keep the selection
+    /// in view.
     func moveSelection(_ move: VerticalMove, context: ModelContext) {
         let area = focusedArea ?? .today
         let ids = visibleTaskIDs(in: area, context: context)
@@ -134,13 +170,16 @@ final class SelectionEngine {
         focusedArea = area
         editingField = nil
 
-        guard let current = selectedTaskID, let index = ids.firstIndex(of: current) else {
+        if let current = selectedTaskID, let index = ids.firstIndex(of: current) {
+            let next = (move == .down) ? min(index + 1, ids.count - 1) : max(index - 1, 0)
+            selectedTaskID = ids[next]
+        } else {
             // No (valid) selection: enter the list at the near edge.
             selectedTaskID = (move == .down) ? ids.first : ids.last
-            return
         }
-        let next = (move == .down) ? min(index + 1, ids.count - 1) : max(index - 1, 0)
-        selectedTaskID = ids[next]
+        if let selectedTaskID {
+            requestScroll([(area, selectedTaskID)])
+        }
     }
 
     /// Right arrow on a structured selection: expands a collapsed node, or
@@ -209,6 +248,9 @@ final class SelectionEngine {
             selectedTaskID = remaining.first
         }
         editingField = nil
+        if let selectedTaskID {
+            requestScroll([(area, selectedTaskID)])
+        }
     }
 
     /// Advances inline editing from the minutes field to the next task's
@@ -228,13 +270,15 @@ final class SelectionEngine {
         }
         selectedTaskID = ids[index + 1]
         editingField = .title
+        requestScroll([(area, ids[index + 1])])
     }
 
     // MARK: - Search jump
 
     /// Jumps to a task from the search dropdown: reveals it (expanding any
     /// collapsed ancestors, opening the Done column when needed), focuses its
-    /// home area, and selects it.
+    /// home area, selects it, and scrolls it into view both in its home
+    /// area's list and in the structured tree.
     func jump(to task: TodayTask) {
         revealInStructured(task)
         let area = homeArea(of: task)
@@ -244,6 +288,11 @@ final class SelectionEngine {
         focusedArea = area
         selectedTaskID = task.id
         editingField = nil
+        if area == .structured {
+            requestScroll([(.structured, task.id)])
+        } else {
+            requestScroll([(area, task.id), (.structured, task.id)])
+        }
     }
 
     /// The most specific area a task belongs to, mirroring the area queries:
