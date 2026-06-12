@@ -3,10 +3,12 @@ import SwiftUI
 
 // MARK: - Row selection
 
-/// Gives a row the standard selection behaviors: click to select, and an
-/// accent ring while it is the current selection. Applied to every task row
-/// (Today, Done, Structured, Scheduled, Waiting) so the keyboard cursor looks
-/// and behaves the same everywhere.
+/// Gives a row the standard selection and cross-area link behaviors: click to
+/// select, an accent ring while it is the current selection, hover reporting,
+/// and an accent-tinted background whenever the same task is hovered or
+/// selected in *any* area. Applied to every task row (Today, Done,
+/// Structured, Scheduled, Waiting) so the keyboard cursor and the
+/// cross-area link look and behave the same everywhere.
 struct TaskSelectionModifier: ViewModifier {
     /// The task this row shows.
     let task: TodayTask
@@ -15,10 +17,28 @@ struct TaskSelectionModifier: ViewModifier {
     let area: AreaKind
 
     @Environment(SelectionEngine.self) private var selectionEngine
+    @Environment(HoverLinkEngine.self) private var hoverEngine
+
+    /// True when this row's task is hovered or selected anywhere in the app.
+    /// Accent (not yellow) so the link reads as "same task" alongside the
+    /// accent selection ring without clashing with the orange NOW marking.
+    private var isLinkTarget: Bool {
+        hoverEngine.hoveredTaskID == task.id || selectionEngine.selectedTaskID == task.id
+    }
 
     func body(content: Content) -> some View {
         content
             .contentShape(Rectangle())
+            // Report hover so every other area can mirror the highlight.
+            // Only clear the shared state if this row still owns it: the
+            // next row's "enter" can arrive before this row's "exit".
+            .onHover { hovering in
+                if hovering {
+                    hoverEngine.hoveredTaskID = task.id
+                } else if hoverEngine.hoveredTaskID == task.id {
+                    hoverEngine.hoveredTaskID = nil
+                }
+            }
             // Click selects (and re-focuses the row's area). A simultaneous
             // gesture (instead of .onTapGesture) keeps the recognizer from
             // competing with drag interactions: an exclusive tap recognizer
@@ -29,6 +49,13 @@ struct TaskSelectionModifier: ViewModifier {
                     selectionEngine.select(task, in: area)
                 }
             )
+            // Accent-tinted background links every appearance of the task.
+            .background {
+                if isLinkTarget {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.15))
+                }
+            }
             // Accent ring marks the selected row.
             .overlay {
                 if selectionEngine.isSelected(task.id, in: area) {

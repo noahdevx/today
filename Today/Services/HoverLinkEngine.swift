@@ -1,16 +1,14 @@
 import Foundation
 
-/// Tracks which task is currently hovered in the Today area so the Structured
-/// tree and Minimap can highlight the corresponding node in real time.
+/// Tracks which task is currently hovered in *any* area so every other area
+/// (and the minimap) can highlight the same task in real time.
 ///
-/// Created once by `ContentView` and injected via `@Environment`. TodayAreaView
-/// writes `hoveredTaskID` on mouse-over; StructuredAreaView and MinimapView read
-/// it to apply visual highlights. The one-way flow (Today → Structured/Map)
-/// matches the design spec.
+/// Created once by `ContentView` and injected via `@Environment`. Every task
+/// row reports mouse-over through the shared `taskSelectable` modifier; rows
+/// and minimap bars whose task matches draw the accent link highlight.
 @MainActor
 @Observable
 final class HoverLinkEngine {
-    /// The persistent ID of the task being hovered in Today, or `nil` when no
-    /// task is under the pointer.
+    /// The persistent ID of the task under the pointer, or `nil` when none.
     var hoveredTaskID: UUID?
 }

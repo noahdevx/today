@@ -12,13 +12,12 @@ struct StructuredNodeView: View {
     let depth: Int
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(HoverLinkEngine.self) private var hoverEngine
     @Environment(SelectionEngine.self) private var selectionEngine
-    /// The Now task's ID (head of the Today column), for the yellow treatment.
+    /// The Now task's ID (head of the Today column), for the NOW badge.
     @Environment(\.nowTaskID) private var nowTaskID
-    /// Current appearance, used to pick a "white-ish" Today background that
-    /// also reads correctly in dark mode.
-    @Environment(\.colorScheme) private var colorScheme
+    /// Ancestors of the task hovered/selected anywhere in the app; a collapsed
+    /// row in this set stands in (highlighted) for the hidden task.
+    @Environment(\.linkedAncestorIDs) private var linkedAncestorIDs
 
     @State private var isAddingChild = false
     @State private var newChildTitle = ""
@@ -36,14 +35,16 @@ struct StructuredNodeView: View {
         !selectionEngine.collapsedIDs.contains(task.id)
     }
 
-    /// Whether the Today hover engine is highlighting this node right now.
-    private var isHighlighted: Bool {
-        hoverEngine.hoveredTaskID == task.id
-    }
-
     /// Whether this node is the Now task (the head of the Today column).
     private var isNow: Bool {
         nowTaskID == task.id && !task.isDone
+    }
+
+    /// True when a task highlighted elsewhere (hover or selection) is hidden
+    /// inside this node's collapsed subtree, so this visible row stands in
+    /// for it.
+    private var representsHiddenLinkedTask: Bool {
+        !isExpanded && linkedAncestorIDs.contains(task.id)
     }
 
     var body: some View {
@@ -128,7 +129,7 @@ struct StructuredNodeView: View {
     // MARK: - Row content
 
     /// The horizontal row: disclosure toggle, done marker, then either the
-    /// static title + time labels or the inline editor while editing.
+    /// static title + badge + time labels or the inline editor while editing.
     private var nodeRow: some View {
         HStack(spacing: 6) {
             disclosureToggle
@@ -137,11 +138,35 @@ struct StructuredNodeView: View {
                 InlineTaskEditor(task: task, area: .structured)
             } else {
                 titleLabel
+                membershipBadge
 
                 Spacer(minLength: 4)
 
                 timeLabel
             }
+        }
+    }
+
+    /// Badge marking the task's Today membership: NOW (orange) for the head
+    /// of the Today column, "Today" (neutral capsule) for the rest. Replaces
+    /// the former background tinting, which competed with the hover/selection
+    /// highlights.
+    @ViewBuilder
+    private var membershipBadge: some View {
+        if isNow {
+            Text("NOW")
+                .font(.caption2.bold())
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(.orange.opacity(0.15)))
+        } else if task.isInToday && !task.isDone {
+            Text("Today")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(.quaternary))
         }
     }
 
@@ -204,28 +229,13 @@ struct StructuredNodeView: View {
         }
     }
 
-    /// Background encoding the task's Today state, per the design spec:
-    /// hover highlight wins, then yellow for the Now task, then a white-ish
-    /// tint for the other Today-linked tasks.
+    /// Background used only when this collapsed row stands in for a hidden
+    /// highlighted task (same accent treatment as the direct cross-area
+    /// highlight drawn by TaskSelectionModifier). Today membership is shown
+    /// by the badge, not the background.
     private var rowBackground: some View {
         RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(backgroundFill)
-    }
-
-    private var backgroundFill: Color {
-        if isHighlighted {
-            return .yellow.opacity(0.2)
-        }
-        if isNow {
-            // Now task: the one being worked on right now.
-            return .yellow.opacity(0.35)
-        }
-        if task.isInToday && !task.isDone {
-            // Today-linked (but not Now): white in light mode, a light surface
-            // tint in dark mode where pure white would glare.
-            return colorScheme == .dark ? Color.white.opacity(0.12) : Color.white
-        }
-        return .clear
+            .fill(representsHiddenLinkedTask ? Color.accentColor.opacity(0.15) : .clear)
     }
 
     // MARK: - Context menu

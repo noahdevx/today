@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// Minimap of the Structured area. Draws a condensed, non-interactive tree of
-/// colored bars and highlights the node currently hovered in the Today column.
-/// Acts as a visual anchor so the user can locate the hovered task's position
+/// colored bars and highlights the task currently hovered or selected in any
+/// area. Acts as a visual anchor so the user can locate that task's position
 /// in the overall project hierarchy without scrolling the Structured column.
 struct MinimapView: View {
     /// All tasks for the condensed tree. Root nodes are filtered by the computed
@@ -44,16 +44,19 @@ struct MinimapView: View {
 // MARK: - Minimap node (recursive)
 
 /// A single condensed bar in the minimap, rendered recursively for each tree
-/// node. Bar color encodes state: yellow for the hovered node, blue for
-/// Today-linked tasks, grey for completed ones, and a neutral tone for others.
+/// node. Bar color encodes state: accent (and a taller bar) for the task
+/// hovered/selected anywhere, blue for Today-linked tasks, grey for completed
+/// ones, and a neutral tone for others.
 private struct MinimapNode: View {
     let task: TodayTask
     let depth: Int
     @Environment(HoverLinkEngine.self) private var hoverEngine
+    @Environment(SelectionEngine.self) private var selectionEngine
 
-    /// Whether the Today hover engine is targeting this exact node.
+    /// Whether this task is hovered or selected anywhere in the app (the
+    /// same condition the row highlight uses).
     private var isHighlighted: Bool {
-        hoverEngine.hoveredTaskID == task.id
+        hoverEngine.hoveredTaskID == task.id || selectionEngine.selectedTaskID == task.id
     }
 
     var body: some View {
@@ -69,9 +72,12 @@ private struct MinimapNode: View {
         }
     }
 
-    /// Bar color derived from the task's state and hover status.
+    /// Bar color derived from the task's state and link-highlight status.
+    /// The highlight uses the accent color (full opacity + taller bar) so it
+    /// matches the row highlight while staying distinguishable from the
+    /// dimmer Today bars.
     private var barColor: Color {
-        if isHighlighted { return .yellow }
+        if isHighlighted { return .accentColor }
         if task.isInToday && !task.isDone { return .blue.opacity(0.6) }
         if task.isDone { return .gray.opacity(0.3) }
         return .secondary.opacity(0.25)
@@ -82,5 +88,6 @@ private struct MinimapNode: View {
     MinimapView()
         .frame(width: 96, height: 500)
         .environment(HoverLinkEngine())
+        .environment(SelectionEngine())
         .modelContainer(for: TodayTask.self, inMemory: true)
 }

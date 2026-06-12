@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
 struct StructuredAreaView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(SelectionEngine.self) private var selectionEngine
+    @Environment(HoverLinkEngine.self) private var hoverEngine
 
     /// Every task in the store, sorted by structured position. Root tasks are
     /// filtered out by the computed property below. A single `@Query` keeps the
@@ -28,6 +29,16 @@ struct StructuredAreaView: View {
     /// Root-level tasks (no parent) in structured order.
     private var rootTasks: [TodayTask] {
         allTasks.filter { $0.parent == nil }
+    }
+
+    /// Ancestor IDs of the task hovered or selected anywhere in the app.
+    /// Injected into the tree so a collapsed node can stand in (highlighted)
+    /// for a linked task hidden inside its subtree.
+    private var linkedAncestorIDs: Set<UUID> {
+        let linkedID = hoverEngine.hoveredTaskID ?? selectionEngine.selectedTaskID
+        guard let linkedID,
+              let task = allTasks.first(where: { $0.id == linkedID }) else { return [] }
+        return Set(task.ancestors.map(\.id))
     }
 
     var body: some View {
@@ -48,6 +59,7 @@ struct StructuredAreaView: View {
                 }
             }
         }
+        .environment(\.linkedAncestorIDs, linkedAncestorIDs)
     }
 
     // MARK: - Root task input

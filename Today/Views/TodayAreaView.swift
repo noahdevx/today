@@ -11,8 +11,6 @@ struct TodayAreaView: View {
 
     /// The shared context for all mutations (injected via `.modelContainer`).
     @Environment(\.modelContext) private var modelContext
-    /// Hover engine for the Today → Structured/Map highlight link.
-    @Environment(HoverLinkEngine.self) private var hoverEngine
     /// Selection engine; carries the in-flight dragged task for drops.
     @Environment(SelectionEngine.self) private var selectionEngine
 
@@ -115,11 +113,9 @@ struct TodayAreaView: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(tasks) { task in
+                    // Hover reporting and the cross-area highlight come from
+                    // the shared taskSelectable modifier inside todayRow.
                     todayRow(for: task)
-                        // Update the hover engine so Structured and Map highlight this task.
-                        .onHover { hovering in
-                            hoverEngine.hoveredTaskID = hovering ? task.id : nil
-                        }
                         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
                         .listRowSeparator(.hidden)
                         .swipeActions(edge: .trailing) {
